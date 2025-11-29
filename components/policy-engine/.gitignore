@@ -1,0 +1,47 @@
+# Binaries
+bin/
+*.exe
+policy-engine
+*.out
+
+# Test coverage
+coverage.out
+coverage.html
+*.test
+
+# Dependencies
+vendor/
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+*.kubeconfig
+
+# Logs
+*.log
+logs/
+
+# Temporary
+tmp/
+temp/
+
+# Build
+dist/
+build/
+
+# Node (for web UI later)
+node_modules/
+npm-debug.log*

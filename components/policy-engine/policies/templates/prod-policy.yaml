@@ -1,0 +1,35 @@
+name: prod-policy
+version: "1.0"
+environment: prod
+description: Production environment policy with strict restrictions
+
+icapConfig:
+  scanningMode: block
+  maxFileSize: 25MB
+  virusScanConfig:
+    enabled: true
+    engine: clamav
+    action: block
+  contentFilterConfig:
+    enabled: true
+    blockedTypes:
+      - "application/x-msdownload"
+      - "application/x-executable"
+      - "application/x-sh"
+      - "application/x-bat"
+    sensitiveDataScanning: true
+
+performanceConfig:
+  timeout: 15
+  maxConcurrent: 5
+  previewSize: 256
+
+complianceConfig:
+  standards:
+    - soc2
+    - pci-dss
+  requirements:
+    - "Virus scanning required and blocking"
+    - "Content filtering strict"
+    - "All uploads scanned"
+    - "Audit logging enabled"

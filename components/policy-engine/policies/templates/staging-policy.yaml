@@ -1,0 +1,30 @@
+name: staging-policy
+version: "1.0"
+environment: staging
+description: Staging environment policy with moderate restrictions
+
+icapConfig:
+  scanningMode: warn
+  maxFileSize: 50MB
+  virusScanConfig:
+    enabled: true
+    engine: clamav
+    action: warn
+  contentFilterConfig:
+    enabled: true
+    blockedTypes:
+      - "application/x-msdownload"
+      - "application/x-executable"
+    sensitiveDataScanning: true
+
+performanceConfig:
+  timeout: 20
+  maxConcurrent: 8
+  previewSize: 512
+
+complianceConfig:
+  standards:
+    - soc2
+  requirements:
+    - "Virus scanning required"
+    - "Content filtering enabled"

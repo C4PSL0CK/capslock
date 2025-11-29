@@ -1,0 +1,25 @@
+name: dev-policy
+version: "1.0"
+environment: dev
+description: Development environment policy with minimal restrictions
+
+icapConfig:
+  scanningMode: log-only
+  maxFileSize: 100MB
+  virusScanConfig:
+    enabled: true
+    engine: clamav
+    action: log
+  contentFilterConfig:
+    enabled: false
+    blockedTypes: []
+    sensitiveDataScanning: false
+
+performanceConfig:
+  timeout: 30
+  maxConcurrent: 10
+  previewSize: 1024
+
+complianceConfig:
+  standards: []
+  requirements: []
