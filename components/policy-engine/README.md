@@ -1,6 +1,6 @@
 # EAPE - Environment-Aware Policy Engine
 
-**Component 2 of the CAPSLock Project**
+**Component of the CAPSLock Project**
 
 ## 🎯 Overview
 
@@ -12,7 +12,7 @@ EAPE (Environment-Aware Policy Engine) is an intelligent policy orchestrator tha
 - **Environment Detection Engine (F1)** - Automatic environment classification with confidence scoring
 - **Policy Selection Engine (F2)** - Multi-factor intelligent policy selection
 
-### 🔧 Core Features (Target: 55%+)
+### 🔧 Core Features 
 - Policy template management
 - Conflict detection and resolution
 - OPA Gatekeeper integration
@@ -29,21 +29,9 @@ EAPE (Environment-Aware Policy Engine) is an intelligent policy orchestrator tha
 - OPA Gatekeeper installed
 - Kyverno installed
 
-## 🛠️ Installation
-
-bash
-# From policy-engine directory
-go mod download
-
-# Build
-go build -o bin/policy-engine cmd/policy-engine/main.go
-
-# Run
-./bin/policy-engine --help
-
 
 ## 🏗️ Project Structure
-
+```
 policy-engine/
 ├── cmd/policy-engine/      # CLI entry point
 ├── pkg/
@@ -57,7 +45,7 @@ policy-engine/
 ├── policies/templates/     # Policy YAML templates
 ├── web/dashboard/          # React UI
 └── docs/                   # Documentation
-
+```
 
 ## 🔗 Integration with Other Components
 
@@ -65,39 +53,18 @@ policy-engine/
 - **Component 3 (MEDS):** Queries service metadata for policy decisions  
 - **Component 4 (SSDLB):** Receives environment definitions and reports status
 
-## 🧪 Testing
-
-bash
-# Unit tests
-go test ./...
-
-# With coverage
-go test -cover ./...
-
-# Integration tests
-go test -tags=integration ./tests/integration/...
-
 
 ## 👤 Developer
 
-- **Name:** Kaavya Nethsara
+- **Name:** Kaavya Raigambandarage
 - **Email:** it22338716@my.sliit.lk
 - **Component:** 2 - EAPE (Environment-Aware Policy Engine)
-- **Timeline:** November 26 - December 13, 2025
 
-## 📊 Progress
-
-- [x] Project setup
-- [ ] Environment Detection (F1) - 0/5 tasks
-- [ ] Policy Selection (F2) - 0/3 tasks
-- [ ] Policy Management - 0/4 tasks
-- [ ] Conflict Resolution - 0/3 tasks
-- [ ] OPA Integration - 0/3 tasks
-- [ ] Kyverno Integration - 0/2 tasks
-- [ ] REST API - 0/3 tasks
-- [ ] CLI - 0/2 tasks
-- [ ] Web UI - 0/6 tasks
 
 ## 📝 License
 
 Part of the CAPSLock project - SLIIT 2025
+
+## 🎓 Academic Context
+
+This project is part of the Research Project module at SLIIT, focusing on building a distributed security system with multiple integrated components for Kubernetes environments.
