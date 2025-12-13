@@ -1,0 +1,10 @@
+{
+    "status": "FAIL",
+    "risk_score": 85,
+    "risk_threshold": 80,
+    "reasons": [
+        "Container 'demo-app' is running as root (runAsNonRoot not set to true)",
+        "ICAP annotation missing or disabled (icap.security/enabled != 'true')"
+    ],
+    "environment": "dev"
+}
