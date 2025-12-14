@@ -1,1 +1,121 @@
+name: MEDS Multi-Environment Risk Validation
 
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - staging
+      - prod
+  pull_request:
+
+jobs:
+  validate-dev:
+    name: Validate DEV
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: meds   # all commands run inside meds/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt || true
+          pip install pyyaml requests colorama
+
+      - name: Run MEDS Risk Validator (DEV)
+        run: |
+          python3 -m meds_core.src.validator \
+            --env dev \
+            --file gitops/apps/demo-app/base/deployment.yaml
+
+      - name: Upload DEV validation report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: dev-validation-report
+          path: meds/reports/
+          if-no-files-found: ignore
+
+  validate-staging:
+    name: Validate STAGING
+    runs-on: ubuntu-latest
+    needs: validate-dev   # only run if DEV job completed
+
+    defaults:
+      run:
+        working-directory: meds
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt || true
+          pip install pyyaml requests colorama
+
+      - name: Run MEDS Risk Validator (STAGING)
+        run: |
+          python3 -m meds_core.src.validator \
+            --env staging \
+            --file gitops/apps/demo-app/base/deployment.yaml
+
+      - name: Upload STAGING validation report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: staging-validation-report
+          path: meds/reports/
+          if-no-files-found: ignore
+
+  validate-prod:
+    name: Validate PROD
+    runs-on: ubuntu-latest
+    needs: validate-staging   # only run if STAGING completed
+
+    defaults:
+      run:
+        working-directory: meds
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt || true
+          pip install pyyaml requests colorama
+
+      - name: Run MEDS Risk Validator (PROD)
+        run: |
+          python3 -m meds_core.src.validator \
+            --env prod \
+            --file gitops/apps/demo-app/base/deployment.yaml
+
+      - name: Upload PROD validation report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: prod-validation-report
+          path: meds/reports/
+          if-no-files-found: ignore
