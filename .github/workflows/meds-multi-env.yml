@@ -3,10 +3,7 @@ name: MEDS Multi-Environment Risk Validation
 on:
   push:
     branches:
-      - main
-      - dev
-      - staging
-      - prod
+      -"**"
   pull_request:
 
 jobs:
