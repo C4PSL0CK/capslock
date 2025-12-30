@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	securityv1alpha1 "github.com/senali/capslock-operator/api/v1alpha1"
+	"github.com/senali/capslock-operator/internal/health"
 )
 
 // ICAPServiceReconciler reconciles a ICAPService object
@@ -238,8 +239,8 @@ func (r *ICAPServiceReconciler) updateStatus(ctx context.Context, icapService *s
 		return err
 	}
 
-	// Calculate health score (simplified for now)
-	healthScore := r.calculateHealthScore(deployment)
+	// Calculate health score with BOTH deployment and icapService
+	healthScore := r.calculateHealthScore(deployment, icapService) // ← FIXED: Added icapService parameter
 
 	// Update status
 	icapService.Status.ReadyReplicas = deployment.Status.ReadyReplicas
@@ -260,17 +261,25 @@ func (r *ICAPServiceReconciler) updateStatus(ctx context.Context, icapService *s
 	return r.Status().Update(ctx, icapService)
 }
 
-// calculateHealthScore computes a basic health score
-func (r *ICAPServiceReconciler) calculateHealthScore(deployment *appsv1.Deployment) int32 {
-	if deployment.Status.Replicas == 0 {
-		return 0
-	}
+// calculateHealthScore computes adaptive health score
+func (r *ICAPServiceReconciler) calculateHealthScore(deployment *appsv1.Deployment, icapService *securityv1alpha1.ICAPService) int32 {
+	// Use advanced adaptive health monitoring
+	metrics := health.CalculateHealth(deployment, icapService)
 
-	// Simple calculation: percentage of ready replicas
-	readyPercentage := float64(deployment.Status.ReadyReplicas) / float64(deployment.Status.Replicas) * 100
+	// Log health details for debugging
+	logger := log.Log.WithName("health")
+	logger.Info("Health metrics calculated",
+		"readiness", fmt.Sprintf("%.1f", metrics.ReadinessScore),
+		"latency", fmt.Sprintf("%.1f", metrics.LatencyScore),
+		"signatures", fmt.Sprintf("%.1f", metrics.SignatureScore),
+		"errors", fmt.Sprintf("%.1f", metrics.ErrorScore),
+		"resources", fmt.Sprintf("%.1f", metrics.ResourceScore),
+		"queue", fmt.Sprintf("%.1f", metrics.QueueScore),
+		"overall", metrics.OverallScore,
+		"context", fmt.Sprintf("%+v", metrics.Context),
+	)
 
-	// Later we'll add more sophisticated metrics (latency, error rates, etc.)
-	return int32(readyPercentage)
+	return metrics.OverallScore
 }
 
 // SetupWithManager sets up the controller with the Manager.
