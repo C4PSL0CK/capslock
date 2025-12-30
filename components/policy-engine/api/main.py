@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict
 from datetime import datetime
+import subprocess
+import os
 
 app = FastAPI(title="EAPE API", version="1.0.0")
 
@@ -46,61 +48,79 @@ async def health():
 
 @app.get("/api/namespaces", response_model=List[NamespaceInfo])
 async def list_namespaces():
-    return [
-        {
-            "name": "dev-test",
-            "environment": "dev",
-            "securityLevel": "low",
-            "riskTolerance": "high",
-            "compliance": [],
-            "labels": {"environment": "dev", "security-level": "low"},
-            "confidence": 0.95,
-            "detectedAt": datetime.now().isoformat()
-        },
-        {
-            "name": "staging-test",
-            "environment": "staging",
-            "securityLevel": "medium",
-            "riskTolerance": "medium",
-            "compliance": ["iso27001", "soc2"],
-            "labels": {
-                "environment": "staging",
-                "security-level": "medium",
-                "compliance-iso27001": "true",
-                "compliance-soc2": "true"
-            },
-            "confidence": 0.92,
-            "detectedAt": datetime.now().isoformat()
-        },
-        {
-            "name": "prod-test",
-            "environment": "prod",
-            "securityLevel": "high",
-            "riskTolerance": "low",
-            "compliance": ["iso27001", "soc2", "pci-dss", "cis"],
-            "labels": {
-                "environment": "prod",
-                "security-level": "high",
-                "compliance-iso27001": "true",
-                "compliance-soc2": "true",
-                "compliance-pci-dss": "true",
-                "compliance-cis": "true"
-            },
-            "confidence": 0.98,
-            "detectedAt": datetime.now().isoformat()
-        }
-    ]
+    """
+    List all namespaces with environment detection from Go backend
+    """
+    try:
+        # Get the path to the Go binary
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        binary_path = os.path.join(script_dir, "..", "bin", "policy-engine")
+        
+        # Call Go backend
+        result = subprocess.run(
+            [binary_path, "detect-json"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            # Parse JSON output from Go
+            import json
+            namespaces_data = json.loads(result.stdout)
+            
+            # Filter out system namespaces for cleaner display
+            filtered = [
+                ns for ns in namespaces_data 
+                if not ns['name'].startswith('kube-') 
+                and ns['name'] not in ['default', 'gatekeeper-system']
+            ]
+            
+            return filtered
+        else:
+            print(f"Go binary error: {result.stderr}")
+            # Fallback to empty list
+            return []
+            
+    except Exception as e:
+        print(f"Error calling Go backend: {e}")
+        # Fallback to empty list
+        return []
 
 @app.get("/api/dashboard/stats", response_model=DashboardStats)
 async def dashboard_stats():
-    return {
-        "totalNamespaces": 7,
-        "devNamespaces": 1,
-        "stagingNamespaces": 1,
-        "prodNamespaces": 1,
-        "complianceEnabled": 2,
-        "lastScanTime": datetime.now().isoformat()
-    }
+    """
+    Get dashboard statistics from real namespace data
+    """
+    try:
+        # Get namespace data
+        namespaces = await list_namespaces()
+        
+        # Count by environment
+        total = len(namespaces)
+        dev_count = sum(1 for ns in namespaces if ns.get('environment') == 'dev')
+        staging_count = sum(1 for ns in namespaces if ns.get('environment') == 'staging')
+        prod_count = sum(1 for ns in namespaces if ns.get('environment') == 'prod')
+        compliance_count = sum(1 for ns in namespaces if len(ns.get('compliance', [])) > 0)
+        
+        return {
+            "totalNamespaces": total,
+            "devNamespaces": dev_count,
+            "stagingNamespaces": staging_count,
+            "prodNamespaces": prod_count,
+            "complianceEnabled": compliance_count,
+            "lastScanTime": datetime.now().isoformat()
+        }
+    except Exception as e:
+        print(f"Error getting stats: {e}")
+        return {
+            "totalNamespaces": 0,
+            "devNamespaces": 0,
+            "stagingNamespaces": 0,
+            "prodNamespaces": 0,
+            "complianceEnabled": 0,
+            "lastScanTime": datetime.now().isoformat()
+        }
 
 if __name__ == "__main__":
     import uvicorn
