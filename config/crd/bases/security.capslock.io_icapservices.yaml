@@ -1,0 +1,148 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: icapservices.security.capslock.io
+spec:
+  group: security.capslock.io
+  names:
+    kind: ICAPService
+    listKind: ICAPServiceList
+    plural: icapservices
+    singular: icapservice
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ICAPService is the Schema for the icapservices API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ICAPServiceSpec defines the desired state of ICAPService
+            properties:
+              clamavConfig:
+                description: ClamAV configuration
+                properties:
+                  image:
+                    default: clamav/clamav:latest
+                    description: Image is the ClamAV container image
+                    type: string
+                  signatureUpdateInterval:
+                    default: 1h
+                    description: SignatureUpdateInterval defines how often to update
+                      virus signatures
+                    type: string
+                type: object
+              healthThresholds:
+                description: Health check thresholds
+                properties:
+                  maxErrorRate:
+                    default: "0.05"
+                    description: MaxErrorRate is the maximum acceptable error rate
+                      (0.0 to 1.0)
+                    type: string
+                  maxLatency:
+                    default: 500ms
+                    description: MaxLatency is the maximum acceptable scan latency
+                    type: string
+                  maxSignatureAge:
+                    default: 24h
+                    description: MaxSignatureAge is the maximum age of virus signatures
+                    type: string
+                type: object
+              replicas:
+                default: 3
+                description: Replicas is the desired number of ICAP service replicas
+                format: int32
+                maximum: 10
+                minimum: 1
+                type: integer
+              scalingPolicy:
+                description: Scaling policy
+                properties:
+                  maxReplicas:
+                    default: 10
+                    description: MaxReplicas is the maximum number of replicas
+                    format: int32
+                    maximum: 50
+                    type: integer
+                  minReplicas:
+                    default: 2
+                    description: MinReplicas is the minimum number of replicas
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  targetHealthScore:
+                    default: 80
+                    description: TargetHealthScore is the desired health score (0-100)
+                    format: int32
+                    maximum: 100
+                    minimum: 50
+                    type: integer
+                type: object
+            type: object
+          status:
+            description: ICAPServiceStatus defines the observed state of ICAPService
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                items:
+                  description: Condition describes the state of the ICAP service
+                  properties:
+                    lastTransitionTime:
+                      description: LastTransitionTime is the last time the condition
+                        transitioned
+                      type: string
+                    message:
+                      description: Message is a human-readable explanation
+                      type: string
+                    reason:
+                      description: Reason is a brief machine-readable explanation
+                      type: string
+                    status:
+                      description: Status of the condition (True, False, Unknown)
+                      type: string
+                    type:
+                      description: Type of condition
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              currentHealthScore:
+                description: CurrentHealthScore is the current health score (0-100)
+                format: int32
+                type: integer
+              lastScalingTime:
+                description: LastScalingTime is when the last scaling event occurred
+                type: string
+              readyReplicas:
+                description: ReadyReplicas is the number of ready ICAP pods
+                format: int32
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
