@@ -18,11 +18,18 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	securityv1alpha1 "github.com/senali/capslock-operator/api/v1alpha1"
 )
@@ -36,28 +43,242 @@ type ICAPServiceReconciler struct {
 // +kubebuilder:rbac:groups=security.capslock.io,resources=icapservices,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=security.capslock.io,resources=icapservices/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=security.capslock.io,resources=icapservices/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the ICAPService object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/reconcile
 func (r *ICAPServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	logger := log.FromContext(ctx)
+	logger.Info("Reconciling ICAPService", "name", req.Name, "namespace", req.Namespace)
 
-	// TODO(user): your logic here
+	// Fetch the ICAPService instance
+	icapService := &securityv1alpha1.ICAPService{}
+	err := r.Get(ctx, req.NamespacedName, icapService)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Object not found, could have been deleted
+			logger.Info("ICAPService resource not found. Ignoring since object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request
+		logger.Error(err, "Failed to get ICAPService")
+		return ctrl.Result{}, err
+	}
 
-	return ctrl.Result{}, nil
+	// Step 1: Create or update ICAP Deployment
+	if err := r.reconcileDeployment(ctx, icapService); err != nil {
+		logger.Error(err, "Failed to reconcile Deployment")
+		return ctrl.Result{}, err
+	}
+
+	// Step 2: Create or update Service
+	if err := r.reconcileService(ctx, icapService); err != nil {
+		logger.Error(err, "Failed to reconcile Service")
+		return ctrl.Result{}, err
+	}
+
+	// Step 3: Update status
+	if err := r.updateStatus(ctx, icapService); err != nil {
+		logger.Error(err, "Failed to update status")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("Successfully reconciled ICAPService")
+	// Requeue after 30 seconds to check health
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+}
+
+// reconcileDeployment creates or updates the ICAP Deployment
+func (r *ICAPServiceReconciler) reconcileDeployment(ctx context.Context, icapService *securityv1alpha1.ICAPService) error {
+	logger := log.FromContext(ctx)
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      icapService.Name + "-deployment",
+			Namespace: icapService.Namespace,
+			Labels: map[string]string{
+				"app":     "icap",
+				"service": icapService.Name,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &icapService.Spec.Replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app":     "icap",
+					"service": icapService.Name,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app":     "icap",
+						"service": icapService.Name,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "c-icap",
+							Image: "nginx:alpine",
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 1344,
+									Name:          "icap",
+								},
+							},
+						},
+						{
+							Name:  "clamav",
+							Image: icapService.Spec.ClamAVConfig.Image,
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 3310,
+									Name:          "clamav",
+								},
+							},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "CLAMAV_NO_FRESHCLAM",
+									Value: "false",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Set ICAPService as owner of the Deployment
+	if err := ctrl.SetControllerReference(icapService, deployment, r.Scheme); err != nil {
+		return err
+	}
+
+	// Check if deployment exists
+	found := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		// Create deployment
+		logger.Info("Creating Deployment", "name", deployment.Name)
+		return r.Create(ctx, deployment)
+	} else if err != nil {
+		return err
+	}
+
+	// Update deployment if needed
+	if *found.Spec.Replicas != icapService.Spec.Replicas {
+		found.Spec.Replicas = &icapService.Spec.Replicas
+		logger.Info("Updating Deployment replicas", "name", deployment.Name, "replicas", icapService.Spec.Replicas)
+		return r.Update(ctx, found)
+	}
+
+	return nil
+}
+
+// reconcileService creates or updates the ICAP Service
+func (r *ICAPServiceReconciler) reconcileService(ctx context.Context, icapService *securityv1alpha1.ICAPService) error {
+	logger := log.FromContext(ctx)
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      icapService.Name + "-service",
+			Namespace: icapService.Namespace,
+			Labels: map[string]string{
+				"app":     "icap",
+				"service": icapService.Name,
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"app":     "icap",
+				"service": icapService.Name,
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Name:     "icap",
+					Port:     1344,
+					Protocol: corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
+	// Set ICAPService as owner
+	if err := ctrl.SetControllerReference(icapService, service, r.Scheme); err != nil {
+		return err
+	}
+
+	// Check if service exists
+	found := &corev1.Service{}
+	err := r.Get(ctx, types.NamespacedName{Name: service.Name, Namespace: service.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		logger.Info("Creating Service", "name", service.Name)
+		return r.Create(ctx, service)
+	} else if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// updateStatus updates the ICAPService status
+func (r *ICAPServiceReconciler) updateStatus(ctx context.Context, icapService *securityv1alpha1.ICAPService) error {
+	logger := log.FromContext(ctx)
+
+	// Get the deployment to check ready replicas
+	deployment := &appsv1.Deployment{}
+	err := r.Get(ctx, types.NamespacedName{
+		Name:      icapService.Name + "-deployment",
+		Namespace: icapService.Namespace,
+	}, deployment)
+	if err != nil {
+		return err
+	}
+
+	// Calculate health score (simplified for now)
+	healthScore := r.calculateHealthScore(deployment)
+
+	// Update status
+	icapService.Status.ReadyReplicas = deployment.Status.ReadyReplicas
+	icapService.Status.CurrentHealthScore = healthScore
+	icapService.Status.LastScalingTime = time.Now().Format(time.RFC3339)
+
+	// Add condition
+	condition := securityv1alpha1.Condition{
+		Type:               "Ready",
+		Status:             "True",
+		LastTransitionTime: time.Now().Format(time.RFC3339),
+		Reason:             "DeploymentReady",
+		Message:            fmt.Sprintf("%d/%d replicas ready", deployment.Status.ReadyReplicas, icapService.Spec.Replicas),
+	}
+	icapService.Status.Conditions = []securityv1alpha1.Condition{condition}
+
+	logger.Info("Updating status", "readyReplicas", deployment.Status.ReadyReplicas, "healthScore", healthScore)
+	return r.Status().Update(ctx, icapService)
+}
+
+// calculateHealthScore computes a basic health score
+func (r *ICAPServiceReconciler) calculateHealthScore(deployment *appsv1.Deployment) int32 {
+	if deployment.Status.Replicas == 0 {
+		return 0
+	}
+
+	// Simple calculation: percentage of ready replicas
+	readyPercentage := float64(deployment.Status.ReadyReplicas) / float64(deployment.Status.Replicas) * 100
+
+	// Later we'll add more sophisticated metrics (latency, error rates, etc.)
+	return int32(readyPercentage)
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ICAPServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&securityv1alpha1.ICAPService{}).
+		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
 		Named("icapservice").
 		Complete(r)
 }
