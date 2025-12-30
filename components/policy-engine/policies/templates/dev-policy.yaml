@@ -1,7 +1,7 @@
 name: dev-policy
 version: "1.0"
 environment: dev
-description: Development environment policy with minimal restrictions
+description: Development environment policy with minimal restrictions for rapid iteration
 
 icapConfig:
   scanningMode: log-only
@@ -23,3 +23,10 @@ performanceConfig:
 complianceConfig:
   standards: []
   requirements: []
+  controls:
+    encryption: optional
+    auditLogging: optional
+    accessControl: optional
+    malwareScanning: optional
+    dataProtection: optional
+    sensitiveDataScanning: false

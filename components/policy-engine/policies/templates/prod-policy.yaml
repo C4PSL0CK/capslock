@@ -1,7 +1,7 @@
 name: prod-policy
 version: "1.0"
 environment: prod
-description: Production environment policy with strict restrictions
+description: Production environment policy with strict restrictions and full compliance support
 
 icapConfig:
   scanningMode: block
@@ -13,10 +13,16 @@ icapConfig:
   contentFilterConfig:
     enabled: true
     blockedTypes:
-      - "application/x-msdownload"
-      - "application/x-executable"
-      - "application/x-sh"
-      - "application/x-bat"
+      - "application/x-msdownload"      # .exe
+      - "application/x-executable"      # executables
+      - "application/x-sh"              # shell scripts
+      - "application/x-bat"             # batch files
+      - "application/x-msi"             # MSI installers
+      - "application/x-deb"             # Debian packages
+      - "application/x-rpm"             # RPM packages
+      - "application/x-powershell"      # PowerShell
+      - "application/javascript"        # JavaScript (can be malicious)
+      - "application/x-vbscript"        # VBScript
     sensitiveDataScanning: true
 
 performanceConfig:
@@ -26,10 +32,24 @@ performanceConfig:
 
 complianceConfig:
   standards:
+    - iso27001
     - soc2
+    - cis
     - pci-dss
   requirements:
-    - "Virus scanning required and blocking"
-    - "Content filtering strict"
-    - "All uploads scanned"
-    - "Audit logging enabled"
+    - "ISO 27001: Malware protection and virus scanning required"
+    - "ISO 27001: All uploads must be scanned and logged"
+    - "SOC 2: Access controls and audit logging enforced"
+    - "SOC 2: Encryption in transit and at rest"
+    - "CIS Benchmarks: Malware defenses active"
+    - "CIS Benchmarks: Audit log management enabled"
+    - "PCI-DSS: Cardholder data environment protection"
+    - "PCI-DSS: All file uploads blocked if malicious"
+    - "PCI-DSS: Comprehensive logging of all activities"
+  controls:
+    encryption: required
+    auditLogging: required
+    accessControl: required
+    malwareScanning: required
+    dataProtection: required
+    sensitiveDataScanning: required

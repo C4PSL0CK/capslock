@@ -1,7 +1,7 @@
 name: staging-policy
 version: "1.0"
 environment: staging
-description: Staging environment policy with moderate restrictions
+description: Staging environment policy with moderate restrictions and compliance testing
 
 icapConfig:
   scanningMode: warn
@@ -24,7 +24,15 @@ performanceConfig:
 
 complianceConfig:
   standards:
+    - iso27001
     - soc2
   requirements:
-    - "Virus scanning required"
-    - "Content filtering enabled"
+    - "ISO 27001: Malware detection and warnings"
+    - "SOC 2: Audit logging for testing compliance"
+  controls:
+    encryption: recommended
+    auditLogging: required
+    accessControl: recommended
+    malwareScanning: required
+    dataProtection: recommended
+    sensitiveDataScanning: true

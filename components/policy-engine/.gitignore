@@ -45,3 +45,7 @@ build/
 # Node (for web UI later)
 node_modules/
 npm-debug.log*
+venv/
+api/venv/
+__pycache__/
+*.pyc
