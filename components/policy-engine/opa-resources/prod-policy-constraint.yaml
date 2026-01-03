@@ -1,0 +1,16 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: EAPEProdPolicy
+metadata:
+    name: eape-prod-policy-constraint
+spec:
+    match:
+        kinds:
+            - apiGroups:
+                - ""
+              kinds:
+                - Pod
+        labelSelector:
+            environment: prod
+    parameters:
+        maxFileSize: 25MB
+        scanningMode: block
