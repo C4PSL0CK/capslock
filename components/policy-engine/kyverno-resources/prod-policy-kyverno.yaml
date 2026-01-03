@@ -1,0 +1,85 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+    name: eape-prod-policy
+    annotations:
+        eape.environment: prod
+        eape.policy: prod-policy
+        eape.version: "1.0"
+        policies.kyverno.io/description: Production environment policy with strict restrictions and full compliance support
+        policies.kyverno.io/title: prod-policy
+spec:
+    validationFailureAction: Enforce
+    background: true
+    rules:
+        - name: require-run-as-nonroot
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+                    selector:
+                        matchLabels:
+                            environment: prod
+          validate:
+            message: Container must run as non-root user (block mode)
+            pattern:
+                spec:
+                    containers:
+                        - securityContext:
+                            runAsNonRoot: true
+        - name: enforce-resource-limits
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+                    selector:
+                        matchLabels:
+                            environment: prod
+          validate:
+            message: 'Containers must have resource limits (max file size: 25MB)'
+            pattern:
+                spec:
+                    containers:
+                        - resources:
+                            limits:
+                                ephemeral-storage: ?(<=100Mi)
+        - name: iso27001-security-context
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+          validate:
+            message: Container must not run with privilege escalation (ISO27001)
+            pattern:
+                spec:
+                    containers:
+                        - securityContext:
+                            allowPrivilegeEscalation: false
+        - name: soc2-require-data-classification
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+          validate:
+            message: Pod must have data-classification label (SOC2 requirement)
+            pattern:
+                metadata:
+                    labels:
+                        data-classification: ?*
+        - name: pci-dss-readonly-root-filesystem
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+          validate:
+            message: Container must have read-only root filesystem (PCI-DSS requirement)
+            pattern:
+                spec:
+                    containers:
+                        - securityContext:
+                            readOnlyRootFilesystem: true

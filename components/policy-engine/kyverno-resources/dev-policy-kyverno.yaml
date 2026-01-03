@@ -1,0 +1,47 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+    name: eape-dev-policy
+    annotations:
+        eape.environment: dev
+        eape.policy: dev-policy
+        eape.version: "1.0"
+        policies.kyverno.io/description: Development environment policy with minimal restrictions for rapid iteration
+        policies.kyverno.io/title: dev-policy
+spec:
+    validationFailureAction: Audit
+    background: true
+    rules:
+        - name: require-run-as-nonroot
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+                    selector:
+                        matchLabels:
+                            environment: dev
+          validate:
+            message: Container must run as non-root user (log-only mode)
+            pattern:
+                spec:
+                    containers:
+                        - securityContext:
+                            runAsNonRoot: true
+        - name: enforce-resource-limits
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+                    selector:
+                        matchLabels:
+                            environment: dev
+          validate:
+            message: 'Containers must have resource limits (max file size: 100MB)'
+            pattern:
+                spec:
+                    containers:
+                        - resources:
+                            limits:
+                                ephemeral-storage: ?(<=100Mi)

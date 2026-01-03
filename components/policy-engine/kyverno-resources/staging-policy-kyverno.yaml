@@ -1,0 +1,72 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+    name: eape-staging-policy
+    annotations:
+        eape.environment: staging
+        eape.policy: staging-policy
+        eape.version: "1.0"
+        policies.kyverno.io/description: Staging environment policy with moderate restrictions and compliance testing
+        policies.kyverno.io/title: staging-policy
+spec:
+    validationFailureAction: Audit
+    background: true
+    rules:
+        - name: require-run-as-nonroot
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+                    selector:
+                        matchLabels:
+                            environment: staging
+          validate:
+            message: Container must run as non-root user (warn mode)
+            pattern:
+                spec:
+                    containers:
+                        - securityContext:
+                            runAsNonRoot: true
+        - name: enforce-resource-limits
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+                    selector:
+                        matchLabels:
+                            environment: staging
+          validate:
+            message: 'Containers must have resource limits (max file size: 50MB)'
+            pattern:
+                spec:
+                    containers:
+                        - resources:
+                            limits:
+                                ephemeral-storage: ?(<=100Mi)
+        - name: iso27001-security-context
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+          validate:
+            message: Container must not run with privilege escalation (ISO27001)
+            pattern:
+                spec:
+                    containers:
+                        - securityContext:
+                            allowPrivilegeEscalation: false
+        - name: soc2-require-data-classification
+          match:
+            any:
+                - resources:
+                    kinds:
+                        - Pod
+          validate:
+            message: Pod must have data-classification label (SOC2 requirement)
+            pattern:
+                metadata:
+                    labels:
+                        data-classification: ?*
