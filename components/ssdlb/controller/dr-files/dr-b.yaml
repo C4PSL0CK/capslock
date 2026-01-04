@@ -1,1 +1,17 @@
-# placeholder - will be replaced in Part 4
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: icap-service
+  namespace: default
+spec:
+  hosts:
+  - "icap.local"
+  gateways:
+  - icap-gateway
+  http:
+  - route:
+    - destination:
+        host: icap-service
+        subset: b
+      weight: 100
+
