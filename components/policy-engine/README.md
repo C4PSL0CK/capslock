@@ -1,70 +1,134 @@
 # EAPE - Environment-Aware Policy Engine
 
-**Component of the CAPSLock Project**
+**Component 2 of CAPSLock Security System**  
+**Project ID:** 25-26J-043  
+**Version:** 1.0.0
 
-## 🎯 Overview
+## Overview
 
-EAPE (Environment-Aware Policy Engine) is an intelligent policy orchestrator that automatically detects Kubernetes environment types (dev/staging/prod) and applies appropriate ICAP security policies.
+EAPE automatically detects Kubernetes environment types (dev/staging/prod) and applies appropriate security policies through integration with OPA Gatekeeper and Kyverno.
 
-## 🚀 Features (55% Milestone)
+## Features
 
-### ✅ Critical Components (Target: 100%)
-- **Environment Detection Engine (F1)** - Automatic environment classification with confidence scoring
-- **Policy Selection Engine (F2)** - Multi-factor intelligent policy selection
+- ✅ Automatic environment detection from namespace labels
+- ✅ Policy selection with conflict resolution
+- ✅ OPA Gatekeeper & Kyverno integration
+- ✅ REST API for automation
+- ✅ CLI for manual operations
+- ✅ Mock components for independent testing
+- ✅ 83.6% test coverage
 
-### 🔧 Core Features 
-- Policy template management
-- Conflict detection and resolution
-- OPA Gatekeeper integration
-- Kyverno integration
-- REST API
-- CLI interface
-- Web Dashboard UI
+## Architecture
+```
+Environment Detection → Policy Selection → Conflict Resolution → Policy Application
+```
 
-## 📋 Prerequisites
+**7-Step Workflow:**
+1. Detect environment from namespace labels
+2. Select optimal policy based on environment
+3. Detect conflicts (if multiple candidates)
+4. Resolve conflicts using strategy
+5. Apply policy via ICAP Operator
+6. Report status to Deployment System
+7. Verify services via Service Discovery
 
-- Go 1.21+
-- Kubernetes (K3s/K8s)
-- kubectl configured
-- OPA Gatekeeper installed
-- Kyverno installed
+## Quick Start
 
+### Build
+```bash
+go build -o bin/policy-engine ./cmd/policy-engine
+```
 
-## 🏗️ Project Structure
+### Run
+```bash
+# List policies
+./bin/policy-engine list
+
+# Detect environment
+./bin/policy-engine detect -n dev-test
+
+# Apply policy
+./bin/policy-engine apply -n prod-test
+
+# Start API server
+./bin/policy-engine serve --port 8080
+```
+
+## Project Structure
 ```
 policy-engine/
-├── cmd/policy-engine/      # CLI entry point
+├── cmd/policy-engine/       # CLI binary
 ├── pkg/
-│   ├── detector/           # Environment detection (F1) ⭐
-│   ├── policy/             # Policy management & selection (F2) ⭐
-│   ├── conflict/           # Conflict resolution
-│   ├── integrations/       # OPA/Kyverno
-│   ├── api/                # REST API
-│   ├── engine/             # Orchestrator
-│   └── mocks/              # Mock components
-├── policies/templates/     # Policy YAML templates
-├── web/dashboard/          # React UI
-└── docs/                   # Documentation
+│   ├── api/                 # REST API (handlers, router)
+│   ├── conflict/            # Conflict detection & resolution
+│   ├── detector/            # Environment detection
+│   ├── engine/              # Policy orchestration
+│   ├── integrations/        # OPA/Kyverno converters
+│   ├── mocks/               # Mock CAPSLock components
+│   └── policy/              # Policy management
+├── policies/templates/      # YAML policy definitions
+├── tests/
+│   ├── e2e/                 # End-to-end tests
+│   ├── integration/         # API integration tests
+│   └── performance/         # Benchmarks
+└── docs/                    # Documentation
 ```
 
-## 🔗 Integration with Other Components
+## Testing
+```bash
+# All tests
+go test ./... -v
 
-- **Component 1 (ICAP Operator):** Receives policy configurations via IcapService CRD
-- **Component 3 (MEDS):** Queries service metadata for policy decisions  
-- **Component 4 (SSDLB):** Receives environment definitions and reports status
+# Coverage
+go test ./... -cover
 
+# E2E tests
+go test ./tests/e2e/ -v
 
-## 👤 Developer
+# Integration tests
+go test ./tests/integration/ -v
 
-- **Name:** Kaavya Raigambandarage
-- **Email:** it22338716@my.sliit.lk
-- **Component:** 2 - EAPE (Environment-Aware Policy Engine)
+# Benchmarks
+go test ./tests/performance/ -bench=. -benchmem
+```
 
+## Test Coverage
 
-## 📝 License
+- **Overall: 83.6%**
+- conflict: 89.9%
+- detector: 80.0%
+- policy: 83.5%
+- opa: 82.6%
+- mocks: 95.8%
 
-Part of the CAPSLock project - SLIIT 2025
+## Performance
 
-## 🎓 Academic Context
+- Policy Selection: 882 ns/op
+- Conflict Detection: 7.2 µs/op
+- Environment Detection: 180 ms/op
+- Full Workflow: 163 ms/op
 
-This project is part of the Research Project module at SLIIT, focusing on building a distributed security system with multiple integrated components for Kubernetes environments.
+## Integration with CAPSLock Components
+
+- **Component 1 (ICAP Operator):** Policy application interface
+- **Component 3 (Service Discovery):** Service health verification
+- **Component 4 (Deployment System):** Status reporting
+
+## Technologies
+
+- Go 1.21+
+- Kubernetes client-go
+- REST API (net/http)
+- YAML policy templates
+
+## Academic Submission
+
+- **Student:** Kaavya
+- **Project:** 25-26J-043
+- **Completion:** 43/43 tasks (100%)
+- **Test Coverage:** 83.6%
+- **Documentation:** Complete
+
+---
+
+**Last Updated:** January 2026
