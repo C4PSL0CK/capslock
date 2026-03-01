@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <button class="theme-toggle" onclick="toggleTheme()">🌙 Dark Mode</button>
     <div class="container">
         <header class="header">
             <h1>🚀 MEDS Dashboard</h1>

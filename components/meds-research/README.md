@@ -1,147 +1,106 @@
 # MEDS - Multi-Environment Deployment System
 
-**Component Owner**: IT22347626 (Marlon Kulatunga)  
-**Part of**: CAPSLock Platform (Group 25-26J-043)
-
 ## Overview
-
-MEDS automates secure Kubernetes deployments with intelligent risk assessment and policy-driven orchestration.
+MEDS automates secure Kubernetes deployments across dev, staging, and production environments using intelligent risk assessment and policy evolution.
 
 ## Features
-
-- **4-Factor Risk Assessment**: Weighted scoring (config 30%, policy 40%, version 20%, environment 10%)
-- **USLO Framework**: Automated policy evolution with grace periods (48h/8h/0-2h)
-- **Compliance Integration**: CIS Kubernetes, PCI DSS v4.0, SOC 2, ISO 27001
-- **Web Dashboard**: Real-time promotion tracking
-- **Environment Thresholds**: Dev (80), Staging (60), Production (40)
+- **Risk Assessment Engine**: 4-factor weighted scoring (config, policy, version, environment)
+- **USLO Framework**: Automated policy evolution with grace periods
+- **Compliance Integration**: Maps to CIS, PCI DSS, SOC2, ISO27001
+- **Web Dashboard**: Real-time promotion tracking and analytics
 
 ## Quick Start
+
+### 1. Install Dependencies
 ```bash
-# Navigate to MEDS directory
-cd components/meds
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Start server
-uvicorn meds.api.main:app --reload
 ```
 
-**Access**: http://localhost:8000
+### 2. Start API Server
+```bash
+python -m uvicorn meds.api.main:app --reload
+```
 
-## API Endpoints
+### 3. Open Dashboard
+Open browser to: http://localhost:8000
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/environments` | List environments |
-| GET | `/api/policies` | Get policy catalog |
-| POST | `/api/promotions` | Create promotion |
-| GET | `/api/promotions` | List promotions |
-| GET | `/api/analytics` | Get metrics |
-
-**API Docs**: http://localhost:8000/docs
+## Architecture
+```
+User → REST API → Promotion Controller → Risk Assessment + USLO → Decision
+```
 
 ## Project Structure
 ```
-meds/
+meds-research/
 ├── meds/
 │   ├── models/          # Data models
-│   ├── validation/      # Risk assessment engine
-│   ├── policy/          # USLO & policy standards
-│   ├── controllers/     # Business logic
+│   ├── validation/      # Risk assessment
+│   ├── policy/          # USLO engine
+│   ├── controllers/     # Promotion logic
 │   └── api/            # REST API
 ├── static/
-│   ├── css/            # Dashboard styles
+│   ├── css/            # Styles
 │   └── js/             # Frontend logic
-└── requirements.txt    # Dependencies
+└── tests/              # Unit tests
 ```
 
-## Integration with Other Components
+## Usage Examples
 
-### ICAP Operator Integration
-```python
-# ICAP sends scan results to MEDS
-POST /api/security-scan
-{
-  "image": "customer-api:v1.2.3",
-  "scan_status": "clean",
-  "threats_found": 0
-}
+### Create Safe Promotion (Approved)
 ```
-
-### Policy Engine Integration
-```python
-# MEDS queries Policy Engine for policies
-GET http://policy-engine:9000/api/policies?environment=production
-```
-
-### Service Discovery Integration
-```python
-# MEDS checks service health
-GET http://service-discovery:7000/api/health/customer-api?env=production
-```
-
-## Testing
-
-### Safe Promotion Example (Approved ✅)
-```
-Name: customer-api-safe
-Source: development → Target: staging
+Name: customer-api-v123
+Source: development
+Target: staging
 Version: v1.2.3
-Policies: 1-2 standard policies
-Expected: APPROVED (Risk ~28/60)
+Policies: 1-2 policies
+Result: APPROVED (risk ~28/60)
 ```
 
-### Risky Promotion Example (Rejected ❌)
+### Create Dangerous Promotion (Rejected)
 ```
-Name: payment-api-risky
-Source: development → Target: production (SKIPPING STAGING!)
+Name: payment-prod-beta
+Source: development
+Target: production (SKIPPING STAGING!)
 Version: v2.0.0-beta
 Policies: 5+ critical policies
-Expected: REJECTED (Risk ~75/40)
+Result: REJECTED (risk ~75/40)
+```
+
+## API Endpoints
+- `POST /api/promotions` - Create promotion
+- `GET /api/promotions` - List promotions
+- `GET /api/promotions/{id}` - Get details
+- `GET /api/environments` - List environments
+- `GET /api/policies` - Get policy catalog
+- `GET /api/analytics` - Get metrics
+
+## Research Contributions
+1. **Multi-Factor Risk Assessment** - Weighted scoring vs binary pass/fail
+2. **USLO Framework** - Automated policy lifecycle with compliance mapping
+
+## Development
+```bash
+# Run tests
+pytest
+
+# Start with auto-reload
+python -m uvicorn meds.api.main:app --reload --port 8000
 ```
 
 ## Configuration
+Edit `meds/api/main.py` to modify:
+- Environment risk thresholds (dev=80, staging=60, prod=40)
+- Default policies per environment
+- Risk factor weights
 
-### Risk Factor Weights
-Edit `meds/validation/risk_scorer.py`:
-```python
-self.config_weight = 0.30
-self.policy_weight = 0.40
-self.version_weight = 0.20
-self.environment_weight = 0.10
-```
+## Troubleshooting
+- **Port 8000 in use**: `pkill -f uvicorn` or use `--port 8080`
+- **Policies not loading**: Check `curl http://localhost:8000/api/policies`
+- **Dashboard not showing**: Hard refresh browser (Ctrl+Shift+R)
 
-### Environment Thresholds
-Edit `meds/api/main.py`:
-```python
-environments_db["development"] = Environment(max_risk_score=80, ...)
-environments_db["staging"] = Environment(max_risk_score=60, ...)
-environments_db["production"] = Environment(max_risk_score=40, ...)
-```
+## Team
+- IT22347626 (Kulatunga) - MEDS Component
+- Part of CAPSLock Project (25-26J-043)
 
-## Research Contributions
-
-1. **Multi-Factor Risk Assessment**: Novel weighted scoring approach
-2. **USLO Framework**: Automated policy evolution with compliance mapping
-3. **Environment-Aware Security**: Progressive enforcement across deployment stages
-
-## Contact
-
-- **Student ID**: IT22347626
-- **Email**: IT22347626@my.sliit.lk
-- **Component**: MEDS (Multi-Environment Deployment System)
-
-## Related Components
-
-- [ICAP Operator](../icap-operator/) - IT22353634
-- [Policy Engine](../policy-engine/) - IT22338716
-- [Service Discovery](../service-discovery/) - IT22345028
-
----
-
-**Part of CAPSLock Platform - SLIIT 2025**
+## License
+Academic Research Project - SLIIT 2025

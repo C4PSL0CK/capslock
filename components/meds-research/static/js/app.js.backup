@@ -135,6 +135,28 @@ window.addEventListener('click', (e) => {
 
 loadData();
 
+// Theme Management
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    
+    const btn = document.querySelector('.theme-toggle');
+    btn.textContent = newTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+}
+
+// Load saved theme on page load
+(function() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    
+    const btn = document.querySelector('.theme-toggle');
+    if (btn) {
+        btn.textContent = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
+    }
+})();
 
 // Theme Management
 function toggleTheme() {

@@ -135,7 +135,6 @@ window.addEventListener('click', (e) => {
 
 loadData();
 
-
 // Theme Management
 function toggleTheme() {
     const currentTheme = document.documentElement.getAttribute('data-theme');
@@ -145,9 +144,7 @@ function toggleTheme() {
     localStorage.setItem('theme', newTheme);
     
     const btn = document.querySelector('.theme-toggle');
-    if (btn) {
-        btn.textContent = newTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
-    }
+    btn.textContent = newTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
 }
 
 // Load saved theme on page load
@@ -160,3 +157,10 @@ function toggleTheme() {
         btn.textContent = savedTheme === 'dark' ? '☀️ Light Mode' : '🌙 Dark Mode';
     }
 })();
+
+// Theme Management
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);

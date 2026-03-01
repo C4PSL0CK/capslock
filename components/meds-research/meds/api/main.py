@@ -1,16 +1,24 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from typing import List, Dict
+from typing import Dict
 import uuid
+import time
 
 from meds.models.promotion import Promotion, Environment, ApplicationRef, PolicyMigration, PromotionSpec
 from meds.models.requests import CreatePromotionRequest
 from meds.controllers.promotion_controller import PromotionController
 from meds.policy.standards import POLICY_CATALOG, get_policies_for_environment
+from meds.monitoring import metrics
+from meds.utils.logger import setup_logging, get_logger
+from prometheus_client import CONTENT_TYPE_LATEST
 
-app = FastAPI(title="MEDS API")
+# Setup logging
+setup_logging()
+logger = get_logger("meds.api")
+
+app = FastAPI(title="MEDS API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,6 +31,7 @@ app.add_middleware(
 promotions_db: Dict[str, Promotion] = {}
 environments_db: Dict[str, Environment] = {}
 
+# Initialize environments
 environments_db["development"] = Environment(
     name="development", type="development", max_risk_score=80,
     policies=get_policies_for_environment("development")
@@ -36,7 +45,13 @@ environments_db["production"] = Environment(
     policies=get_policies_for_environment("production")
 )
 
+# Set environment thresholds in metrics
+for env_name, env in environments_db.items():
+    metrics.set_environment_threshold(env_name, env.max_risk_score)
+
 controller = PromotionController()
+
+logger.info("meds_api_started", environments=list(environments_db.keys()))
 
 @app.get("/")
 async def root():
@@ -46,8 +61,14 @@ async def root():
     except:
         return {"message": "MEDS API running. Visit /docs for API documentation"}
 
+@app.get("/metrics")
+async def get_metrics():
+    """Prometheus metrics endpoint"""
+    return Response(content=metrics.get_metrics(), media_type=CONTENT_TYPE_LATEST)
+
 @app.get("/api/policies")
 async def get_policies():
+    start_time = time.time()
     policies = []
     for name, policy in POLICY_CATALOG.items():
         policies.append({
@@ -58,14 +79,30 @@ async def get_policies():
             "required_for": policy.required_for,
             "compliance": {f.value: c for f, c in policy.compliance_mappings.items()}
         })
+    
+    duration = time.time() - start_time
+    metrics.api_request_duration.labels(method="GET", endpoint="/api/policies", status_code=200).observe(duration)
+    logger.info("policies_retrieved", count=len(policies), duration=duration)
     return policies
 
 @app.get("/api/environments")
 async def get_environments():
-    return list(environments_db.values())
+    start_time = time.time()
+    result = list(environments_db.values())
+    duration = time.time() - start_time
+    metrics.api_request_duration.labels(method="GET", endpoint="/api/environments", status_code=200).observe(duration)
+    return result
 
 @app.post("/api/promotions")
 async def create_promotion(request: CreatePromotionRequest):
+    start_time = time.time()
+    
+    logger.info("promotion_request_received", 
+                name=request.name,
+                source=request.source_environment,
+                target=request.target_environment,
+                version=request.version)
+    
     if request.source_environment not in environments_db:
         raise HTTPException(status_code=400, detail="Source environment not found")
     if request.target_environment not in environments_db:
@@ -84,13 +121,34 @@ async def create_promotion(request: CreatePromotionRequest):
         )
     )
     
+    policy_eval_start = time.time()
     result = controller.process_promotion(
-        promotion, 
+        promotion,
         environments_db[request.source_environment],
         environments_db[request.target_environment]
     )
+    policy_eval_duration = time.time() - policy_eval_start
     
     promotions_db[promotion_id] = promotion
+    
+    # Record metrics
+    metrics.record_promotion_request(request.target_environment, result["decision"])
+    metrics.record_promotion_decision(result["decision"], request.source_environment, request.target_environment)
+    metrics.record_risk_score(result["risk_assessment"]["total_score"], request.target_environment)
+    metrics.record_policy_evaluation_time(policy_eval_duration, len(request.add_policies))
+    metrics.set_active_promotions(len(promotions_db))
+    
+    for policy in request.add_policies:
+        metrics.record_policy_change("add", policy)
+    
+    duration = time.time() - start_time
+    metrics.api_request_duration.labels(method="POST", endpoint="/api/promotions", status_code=200).observe(duration)
+    
+    logger.info("promotion_processed",
+                promotion_id=promotion_id,
+                decision=result["decision"],
+                risk_score=result["risk_assessment"]["total_score"],
+                duration=duration)
     
     return {
         "id": promotion_id,
@@ -105,7 +163,8 @@ async def create_promotion(request: CreatePromotionRequest):
 
 @app.get("/api/promotions")
 async def get_promotions():
-    return [
+    start_time = time.time()
+    result = [
         {
             "id": p.metadata["id"],
             "name": p.metadata["name"],
@@ -119,20 +178,25 @@ async def get_promotions():
         }
         for p in promotions_db.values()
     ]
+    duration = time.time() - start_time
+    metrics.api_request_duration.labels(method="GET", endpoint="/api/promotions", status_code=200).observe(duration)
+    return result
 
 @app.get("/api/analytics")
 async def get_analytics():
+    start_time = time.time()
     total = len(promotions_db)
     approved = sum(1 for p in promotions_db.values() if p.status.decision == "APPROVED")
     avg_risk = sum(p.status.risk_score or 0 for p in promotions_db.values()) / total if total > 0 else 0
     
-    return {
+    result = {
         "total_promotions": total,
         "approved": approved,
         "rejected": total - approved,
         "average_risk_score": round(avg_risk, 1)
     }
+    duration = time.time() - start_time
+    metrics.api_request_duration.labels(method="GET", endpoint="/api/analytics", status_code=200).observe(duration)
+    return result
 
-# Mount static files
-from fastapi.staticfiles import StaticFiles
 app.mount("/static", StaticFiles(directory="static"), name="static")
