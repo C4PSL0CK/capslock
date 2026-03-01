@@ -1,4 +1,7 @@
-pyyaml
-requests
-colorama
-flask
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+kopf==1.37.1
+kubernetes==28.1.0
+pytest==7.4.3
+httpx==0.25.1
