@@ -7,10 +7,11 @@
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
-    <button class="theme-toggle" onclick="toggleTheme()">🌙 Dark Mode</button>
+    <button class="theme-toggle" onclick="toggleTheme()"></button>
+
     <div class="container">
         <header class="header">
-            <h1>🚀 MEDS Dashboard</h1>
+            <h1>MEDS Dashboard</h1>
             <p>Multi-Environment Deployment System</p>
         </header>
 
@@ -33,43 +34,96 @@
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header">
-                <h2>Create New Promotion</h2>
-            </div>
-            <form id="promotion-form">
-                <div class="form-row">
-                    <input type="text" id="name" placeholder="Promotion Name" required>
-                    <input type="text" id="app-name" placeholder="Application Name" required>
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+            <button class="tab-btn" data-tab="audit" onclick="switchTab('audit')">Audit Log</button>
+            <button class="tab-btn" data-tab="versions" onclick="switchTab('versions')">Policy Versions</button>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div id="tab-dashboard" class="tab-panel">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Create New Promotion</h2>
                 </div>
-                <div class="form-row">
-                    <select id="source-env" required>
-                        <option value="">Source Environment</option>
+                <form id="promotion-form">
+                    <div class="form-row">
+                        <input type="text" id="name" placeholder="Promotion Name" required>
+                        <input type="text" id="app-name" placeholder="Application Name" required>
+                    </div>
+                    <div class="form-row">
+                        <select id="source-env" required>
+                            <option value="">Source Environment</option>
+                            <option value="development">Development</option>
+                            <option value="staging">Staging</option>
+                        </select>
+                        <select id="target-env" required>
+                            <option value="">Target Environment</option>
+                            <option value="staging">Staging</option>
+                            <option value="production">Production</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <input type="text" id="version" placeholder="Version (e.g., v1.2.3)" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Add Policies:</label>
+                        <div id="policy-selector"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Create Promotion</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Recent Promotions</h2>
+                <div id="promotions-list"></div>
+            </div>
+        </div>
+
+        <!-- Audit Log Tab -->
+        <div id="tab-audit" class="tab-panel hidden">
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>Audit Log</h2>
+                    <div class="card-controls">
+                        <select id="audit-filter" onchange="loadAuditLog()">
+                            <option value="">All Events</option>
+                            <option value="promotion_approved">Approved</option>
+                            <option value="promotion_rejected">Rejected</option>
+                            <option value="icap_threat_detected">ICAP Threat</option>
+                            <option value="policy_rollback">Rollback</option>
+                            <option value="promotion_created">Created</option>
+                        </select>
+                        <button class="btn btn-secondary btn-icon" onclick="loadAuditLog()">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"/>
+                                <polyline points="1 20 1 14 7 14"/>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                            </svg>
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+                <div id="audit-table"></div>
+            </div>
+        </div>
+
+        <!-- Policy Versions Tab -->
+        <div id="tab-versions" class="tab-panel hidden">
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>Policy Version History</h2>
+                    <select id="versions-env-select" onchange="loadVersions(this.value)">
                         <option value="development">Development</option>
                         <option value="staging">Staging</option>
-                    </select>
-                    <select id="target-env" required>
-                        <option value="">Target Environment</option>
-                        <option value="staging">Staging</option>
-                        <option value="production">Production</option>
+                        <option value="production" selected>Production</option>
                     </select>
                 </div>
-                <div class="form-row">
-                    <input type="text" id="version" placeholder="Version (e.g., v1.2.3)" required>
-                </div>
-                <div class="form-group">
-                    <label>Add Policies:</label>
-                    <div id="policy-selector"></div>
-                </div>
-                <button type="submit" class="btn btn-primary">Create Promotion</button>
-            </form>
+                <div id="versions-table"></div>
+            </div>
         </div>
 
-        <div class="card">
-            <h2>Recent Promotions</h2>
-            <div id="promotions-list"></div>
-        </div>
-
+        <!-- Result Modal -->
         <div id="result-modal" class="modal">
             <div class="modal-content">
                 <span class="close">&times;</span>

@@ -10,3 +10,7 @@ class CreatePromotionRequest(BaseModel):
     version: str
     add_policies: List[str] = []
     remove_policies: List[str] = []
+
+
+class RollbackRequest(BaseModel):
+    version_id: str

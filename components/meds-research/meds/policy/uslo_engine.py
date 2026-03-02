@@ -2,8 +2,8 @@ from typing import List, Dict, Any
 from meds.policy.standards import POLICY_CATALOG
 
 class PolicyEvolutionTracker:
-    def __init__(self):
-        pass
+    def __init__(self, version_store=None):
+        self.version_store = version_store
 
     def plan_migration(self, promotion: Any, source_env: Any, target_env: Any) -> Dict[str, Any]:
         plan = {
