@@ -3,233 +3,310 @@ package engine
 import (
 	"context"
 	"fmt"
-	"log"
+	"time"
 
+	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/compliance"
+	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/compliance/cis"
+	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/compliance/pcidss"
 	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/conflict"
 	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/detector"
-	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/mocks"
 	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/policy"
+	"k8s.io/client-go/kubernetes"
 )
 
-// PolicyEngine orchestrates the complete policy application workflow
+// PolicyEngine orchestrates the policy application workflow
 type PolicyEngine struct {
-	detector         *detector.EnvironmentDetector
-	policyManager    *policy.PolicyManager
-	policySelector   *policy.PolicySelector
-	conflictDetector *conflict.ConflictDetector
-	conflictResolver *conflict.ConflictResolver
-	icapOperator     *mocks.MockIcapOperator
-	serviceDiscovery *mocks.MockServiceDiscovery
-	deploymentSystem *mocks.MockDeploymentSystem
+	clientset        *kubernetes.Clientset
+	detector         *detector.Detector
+	conflictResolver *conflict.Resolver
+	cisValidator     *cis.CISValidator
+	pcidssValidator  *pcidss.PCIDSSValidator
 }
 
-// NewPolicyEngine creates a new policy engine with all dependencies
-func NewPolicyEngine() (*PolicyEngine, error) {
-	// Initialize detector
-	det, err := detector.NewEnvironmentDetector()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create detector: %w", err)
-	}
-
-	// Initialize policy manager
-	pm := policy.NewPolicyManager()
-	if err := pm.LoadTemplates("../../policies/templates"); err != nil {
-		return nil, fmt.Errorf("failed to load templates: %w", err)
-	}
-
-	// Initialize policy selector
-	ps := policy.NewPolicySelector(pm)
-
-	// Initialize conflict components
-	cd := conflict.NewConflictDetector()
-	cr := conflict.NewConflictResolver(conflict.StrategyEnvironmentAware)
-
-	// Initialize mock components
-	icapOp := mocks.NewMockIcapOperator()
-	svcDiscovery := mocks.NewMockServiceDiscovery()
-	deploySystem := mocks.NewMockDeploymentSystem()
-
+// NewPolicyEngine creates a new policy engine
+func NewPolicyEngine(clientset *kubernetes.Clientset) *PolicyEngine {
 	return &PolicyEngine{
-		detector:         det,
-		policyManager:    pm,
-		policySelector:   ps,
-		conflictDetector: cd,
-		conflictResolver: cr,
-		icapOperator:     icapOp,
-		serviceDiscovery: svcDiscovery,
-		deploymentSystem: deploySystem,
-	}, nil
+		clientset:        clientset,
+		detector:         detector.NewDetector(clientset),
+		conflictResolver: conflict.NewResolver(),
+		cisValidator:     cis.NewCISValidator(),
+		pcidssValidator:  pcidss.NewPCIDSSValidator(),
+	}
 }
 
-// ApplyPolicyToNamespace executes the complete workflow to apply a policy to a namespace
-func (pe *PolicyEngine) ApplyPolicyToNamespace(ctx context.Context, namespace string) (*ApplyResult, error) {
-	result := &ApplyResult{
+// ApplyPolicyToNamespace applies the appropriate policy to a namespace
+func (pe *PolicyEngine) ApplyPolicyToNamespace(ctx context.Context, namespace string) (*WorkflowResult, error) {
+	result := &WorkflowResult{
 		Namespace: namespace,
-		Steps:     []string{},
+		StartTime: time.Now(),
+		Steps:     []WorkflowStep{},
+		Success:   false,
 	}
 
-	log.Printf("🚀 Starting policy application workflow for namespace: %s", namespace)
-	result.Steps = append(result.Steps, fmt.Sprintf("Started workflow for namespace: %s", namespace))
-
-	// Step 1: Detect environment
-	log.Println("📊 Step 1: Detecting environment...")
-	result.Steps = append(result.Steps, "Step 1: Environment detection")
-
-	envCtx, err := pe.detector.Detect(ctx, namespace)
+	// Step 1: Environment Detection
+	stepStart := time.Now()
+	environment, confidence, err := pe.detector.DetectEnvironment(ctx, namespace)
 	if err != nil {
 		result.Error = fmt.Sprintf("Environment detection failed: %v", err)
-		pe.deploymentSystem.MarkPolicyFailed(namespace, "unknown", result.Error)
-		return result, fmt.Errorf("detection failed: %w", err)
+		result.EndTime = time.Now()
+		return result, err
 	}
 
-	log.Printf("✅ Detected environment: %s (confidence: %.2f)", envCtx.EnvironmentType, envCtx.Confidence)
-	result.DetectedEnvironment = string(envCtx.EnvironmentType)
-	result.Confidence = envCtx.Confidence
-	result.Steps = append(result.Steps, fmt.Sprintf("Detected: %s (confidence: %.2f)", envCtx.EnvironmentType, envCtx.Confidence))
+	result.Environment = environment
+	result.Confidence = confidence
+	result.Steps = append(result.Steps, WorkflowStep{
+		StepNumber: 1,
+		Name:       "Environment Detection",
+		Status:     "completed",
+		Duration:   time.Since(stepStart).Seconds(),
+		Details:    fmt.Sprintf("Detected: %s (confidence: %.2f%%)", environment, confidence*100),
+	})
 
-	// Step 2: Select best policy
-	log.Println("🎯 Step 2: Selecting optimal policy...")
-	result.Steps = append(result.Steps, "Step 2: Policy selection")
+	// Step 2: Extract Namespace Configuration
+	stepStart = time.Now()
+	nsConfig, err := pe.detector.ExtractNamespaceConfig(ctx, namespace)
+	if err != nil {
+		result.Error = fmt.Sprintf("Config extraction failed: %v", err)
+		result.EndTime = time.Now()
+		return result, err
+	}
 
-	selectedPolicy, score, err := pe.policySelector.SelectPolicy(envCtx)
+	result.Steps = append(result.Steps, WorkflowStep{
+		StepNumber: 2,
+		Name:       "Configuration Extraction",
+		Status:     "completed",
+		Duration:   time.Since(stepStart).Seconds(),
+		Details:    fmt.Sprintf("Extracted config for %d pods", nsConfig.PodSecurity.TotalPods),
+	})
+
+	// Step 3: Policy Selection
+	stepStart = time.Now()
+	selectedPolicy, err := pe.selectPolicy(environment, nsConfig)
 	if err != nil {
 		result.Error = fmt.Sprintf("Policy selection failed: %v", err)
-		pe.deploymentSystem.MarkPolicyFailed(namespace, "unknown", result.Error)
-		return result, fmt.Errorf("selection failed: %w", err)
+		result.EndTime = time.Now()
+		return result, err
 	}
 
-	log.Printf("✅ Selected policy: %s (score: %.2f)", selectedPolicy.Name, score.TotalScore)
 	result.SelectedPolicy = selectedPolicy.Name
-	result.SelectionScore = score.TotalScore
-	result.Steps = append(result.Steps, fmt.Sprintf("Selected: %s (score: %.2f)", selectedPolicy.Name, score.TotalScore))
+	result.Steps = append(result.Steps, WorkflowStep{
+		StepNumber: 3,
+		Name:       "Policy Selection",
+		Status:     "completed",
+		Duration:   time.Since(stepStart).Seconds(),
+		Details:    fmt.Sprintf("Selected: %s", selectedPolicy.Name),
+	})
 
-	// Step 3: Check for conflicts (with other policies that might apply)
-	log.Println("🔍 Step 3: Checking for conflicts...")
-	result.Steps = append(result.Steps, "Step 3: Conflict detection")
+	// Step 4: Conflict Detection
+	stepStart = time.Now()
+	conflictsList := pe.conflictResolver.DetectConflicts(selectedPolicy)
+	conflictStatus := "passed"
+	conflictDetails := "No conflicts detected"
 
-	// Get all templates for this environment type
-	candidatePolicies := pe.policyManager.GetTemplatesByEnvironment(envCtx.EnvironmentType)
-	
-	if len(candidatePolicies) > 1 {
-		conflictReport, err := pe.conflictDetector.DetectConflicts(candidatePolicies)
-		if err != nil {
-			log.Printf("⚠️  Conflict detection error: %v", err)
-		} else if conflictReport.TotalConflicts > 0 {
-			log.Printf("⚠️  Found %d conflicts, resolving...", conflictReport.TotalConflicts)
-			result.ConflictsDetected = conflictReport.TotalConflicts
-			result.Steps = append(result.Steps, fmt.Sprintf("Detected %d conflicts", conflictReport.TotalConflicts))
-
-			// Step 4: Resolve conflicts
-			log.Println("🔧 Step 4: Resolving conflicts...")
-			result.Steps = append(result.Steps, "Step 4: Conflict resolution")
-
-			resolutionReport, err := pe.conflictResolver.ResolveConflicts(conflictReport, envCtx)
-			if err != nil {
-				result.Error = fmt.Sprintf("Conflict resolution failed: %v", err)
-				pe.deploymentSystem.MarkPolicyFailed(namespace, selectedPolicy.Name, result.Error)
-				return result, fmt.Errorf("resolution failed: %w", err)
-			}
-
-			if resolutionReport.FinalPolicy != nil {
-				selectedPolicy = resolutionReport.FinalPolicy
-				log.Printf("✅ Conflicts resolved, final policy: %s", selectedPolicy.Name)
-				result.SelectedPolicy = selectedPolicy.Name
-				result.ConflictsResolved = resolutionReport.TotalResolved
-				result.Steps = append(result.Steps, fmt.Sprintf("Resolved %d conflicts", resolutionReport.TotalResolved))
-			}
-		} else {
-			log.Println("✅ No conflicts detected")
-			result.Steps = append(result.Steps, "No conflicts detected")
-		}
-	} else {
-		log.Println("✅ Single policy candidate, no conflicts possible")
-		result.Steps = append(result.Steps, "Single policy candidate, no conflicts")
+	if len(conflictsList) > 0 {
+		conflictStatus = "warning"
+		conflictDetails = fmt.Sprintf("Detected %d potential conflicts", len(conflictsList))
 	}
 
-	// Step 5: Apply policy via ICAP operator
-	log.Println("📦 Step 5: Applying policy to namespace...")
-	result.Steps = append(result.Steps, "Step 5: Policy application")
+	// Convert PolicyConflict to string for backward compatibility
+	conflicts := []string{}
+	for _, c := range conflictsList {
+		conflicts = append(conflicts, c.Description)
+	}
+	result.Conflicts = conflicts
 
-	err = pe.icapOperator.ApplyPolicy(namespace, selectedPolicy)
+	result.Steps = append(result.Steps, WorkflowStep{
+		StepNumber: 4,
+		Name:       "Conflict Detection",
+		Status:     conflictStatus,
+		Duration:   time.Since(stepStart).Seconds(),
+		Details:    conflictDetails,
+	})
+
+	// Step 5: Compliance Validation (NEW)
+	stepStart = time.Now()
+	complianceReport, err := pe.validateCompliance(ctx, nsConfig, selectedPolicy)
 	if err != nil {
+		result.Error = fmt.Sprintf("Compliance validation failed: %v", err)
+		result.EndTime = time.Now()
+		return result, err
+	}
+
+	result.ComplianceReport = complianceReport
+
+	complianceStatus := "passed"
+	if !complianceReport.OverallCompliant {
+		complianceStatus = "failed"
+	}
+
+	result.Steps = append(result.Steps, WorkflowStep{
+		StepNumber: 5,
+		Name:       "Compliance Validation",
+		Status:     complianceStatus,
+		Duration:   time.Since(stepStart).Seconds(),
+		Details:    fmt.Sprintf("Overall Score: %.1f%% | Violations: %d", complianceReport.OverallScore*100, complianceReport.TotalViolations),
+	})
+
+	// Fail workflow if compliance not met
+	if !complianceReport.OverallCompliant {
+		result.Error = fmt.Sprintf("Compliance validation failed: %d violations found", complianceReport.TotalViolations)
+		result.Success = false
+		result.EndTime = time.Now()
+		return result, fmt.Errorf("compliance validation failed")
+	}
+
+	// Step 6: Policy Application
+	stepStart = time.Now()
+	if err := pe.applyPolicy(ctx, namespace, selectedPolicy); err != nil {
 		result.Error = fmt.Sprintf("Policy application failed: %v", err)
-		pe.deploymentSystem.MarkPolicyFailed(namespace, selectedPolicy.Name, result.Error)
-		return result, fmt.Errorf("application failed: %w", err)
+		result.EndTime = time.Now()
+		return result, err
 	}
 
-	log.Printf("✅ Policy applied successfully")
-	result.Steps = append(result.Steps, "Policy applied successfully")
+	result.Steps = append(result.Steps, WorkflowStep{
+		StepNumber: 6,
+		Name:       "Policy Application",
+		Status:     "completed",
+		Duration:   time.Since(stepStart).Seconds(),
+		Details:    "Policy applied successfully",
+	})
 
-	// Step 6: Report status to deployment system
-	log.Println("📝 Step 6: Reporting deployment status...")
-	result.Steps = append(result.Steps, "Step 6: Status reporting")
-
-	err = pe.deploymentSystem.ReportPolicyStatus(namespace, selectedPolicy.Name, "deployed")
-	if err != nil {
-		log.Printf("⚠️  Status reporting failed: %v", err)
-	} else {
-		log.Println("✅ Status reported to deployment system")
-		result.Steps = append(result.Steps, "Status reported")
-	}
-
-	// Step 7: Verify with service discovery
-	log.Println("🔍 Step 7: Verifying services...")
-	result.Steps = append(result.Steps, "Step 7: Service verification")
-
-	services, err := pe.serviceDiscovery.GetHealthyServices(string(envCtx.EnvironmentType))
-	if err != nil {
-		log.Printf("⚠️  Service discovery failed: %v", err)
-	} else {
-		log.Printf("✅ Found %d healthy services in environment", len(services))
-		result.HealthyServices = len(services)
-		result.Steps = append(result.Steps, fmt.Sprintf("Verified %d healthy services", len(services)))
-	}
-
+	// Mark as successful
 	result.Success = true
-	log.Printf("🎉 Workflow completed successfully for namespace: %s", namespace)
-	result.Steps = append(result.Steps, "✅ Workflow completed successfully")
+	result.EndTime = time.Now()
 
 	return result, nil
 }
 
-// GetPolicyStatus retrieves the current policy status for a namespace
-func (pe *PolicyEngine) GetPolicyStatus(namespace string) (*mocks.PolicyStatus, error) {
-	return pe.deploymentSystem.GetPolicyStatus(namespace)
-}
+// validateCompliance runs compliance validation against the namespace config
+func (pe *PolicyEngine) validateCompliance(ctx context.Context, nsConfig *detector.NamespaceConfig, selectedPolicy *policy.PolicyTemplate) (*compliance.ComplianceReport, error) {
+	report := compliance.NewComplianceReport(nsConfig.Name)
 
-// ListAppliedPolicies returns all policies currently applied across namespaces
-func (pe *PolicyEngine) ListAppliedPolicies() []*mocks.AppliedPolicy {
-	return pe.icapOperator.ListAppliedPolicies()
-}
+	// Check which frameworks are required by the policy
+	requiredFrameworks := selectedPolicy.Compliance.Standards
 
-// RemovePolicy removes a policy from a namespace
-func (pe *PolicyEngine) RemovePolicy(namespace string) error {
-	log.Printf("🗑️  Removing policy from namespace: %s", namespace)
-	
-	// Remove from ICAP operator
-	err := pe.icapOperator.RemovePolicy(namespace)
-	if err != nil {
-		return fmt.Errorf("failed to remove policy: %w", err)
+	// Run CIS validation if required
+	if contains(requiredFrameworks, "cis") {
+		cisReport, err := pe.cisValidator.Validate(nsConfig)
+		if err != nil {
+			return nil, fmt.Errorf("CIS validation failed: %w", err)
+		}
+		report.CIS = cisReport
 	}
 
-	// Note: We don't remove from deployment system as it maintains history
-	// The deployment system tracks all deployments for audit purposes
+	// Run PCI-DSS validation if required
+	if contains(requiredFrameworks, "pci-dss") {
+		pcidssReport, err := pe.pcidssValidator.Validate(nsConfig)
+		if err != nil {
+			return nil, fmt.Errorf("PCI-DSS validation failed: %w", err)
+		}
+		report.PCIDSS = pcidssReport
+	}
 
-	log.Println("✅ Policy removed successfully")
+	// Calculate overall scores
+	report.CalculateOverallScore()
+	report.CalculateTotalViolations()
+	report.GenerateSummary()
+
+	return report, nil
+}
+
+// selectPolicy selects the appropriate policy based on environment and compliance needs
+func (pe *PolicyEngine) selectPolicy(environment string, nsConfig *detector.NamespaceConfig) (*policy.PolicyTemplate, error) {
+	// Load policy templates
+	templates, err := policy.LoadPolicyTemplates()
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter by environment
+	var candidates []*policy.PolicyTemplate
+	for _, template := range templates {
+		if template.TargetEnvironment == environment {
+			candidates = append(candidates, template)
+		}
+	}
+
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no policy found for environment: %s", environment)
+	}
+
+	// If only one candidate, return it
+	if len(candidates) == 1 {
+		return candidates[0], nil
+	}
+
+	// Score candidates based on compliance requirements
+	bestPolicy := candidates[0]
+	bestScore := pe.scorePolicy(bestPolicy, nsConfig)
+
+	for i := 1; i < len(candidates); i++ {
+		score := pe.scorePolicy(candidates[i], nsConfig)
+		if score > bestScore {
+			bestScore = score
+			bestPolicy = candidates[i]
+		}
+	}
+
+	return bestPolicy, nil
+}
+
+// scorePolicy scores a policy based on how well it matches namespace requirements
+func (pe *PolicyEngine) scorePolicy(policy *policy.PolicyTemplate, nsConfig *detector.NamespaceConfig) float64 {
+	score := 0.0
+
+	// Base score from environment match (already filtered, so this is 1.0)
+	score += 1.0
+
+	// Add compliance coverage score (30% weight)
+	complianceScore := 0.0
+	requiredCompliance := nsConfig.RequiredCompliance
+	policyCompliance := policy.Compliance.Standards
+
+	if len(requiredCompliance) > 0 {
+		matchCount := 0
+		for _, required := range requiredCompliance {
+			if contains(policyCompliance, required) {
+				matchCount++
+			}
+		}
+		complianceScore = float64(matchCount) / float64(len(requiredCompliance))
+	}
+	score += complianceScore * 0.3
+
+	// Add risk score (20% weight)
+	riskScore := 0.0
+	switch policy.RiskLevel {
+	case "low":
+		riskScore = 1.0
+	case "medium":
+		riskScore = 0.6
+	case "high":
+		riskScore = 0.3
+	}
+	score += riskScore * 0.2
+
+	return score
+}
+
+// applyPolicy applies the selected policy to the namespace
+func (pe *PolicyEngine) applyPolicy(ctx context.Context, namespace string, policy *policy.PolicyTemplate) error {
+	// This is where you would actually apply the policy
+	// For now, this is a placeholder
+
+	// TODO: Generate Gatekeeper ConstraintTemplates
+	// TODO: Generate Kyverno ClusterPolicies
+	// TODO: Apply to cluster
+
 	return nil
 }
 
-// ApplyResult contains the result of a policy application workflow
-type ApplyResult struct {
-	Namespace           string
-	DetectedEnvironment string
-	Confidence          float64
-	SelectedPolicy      string
-	SelectionScore      float64
-	ConflictsDetected   int
-	ConflictsResolved   int
-	HealthyServices     int
-	Success             bool
-	Error               string
-	Steps               []string
+// Helper function
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }

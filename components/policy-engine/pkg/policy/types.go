@@ -1,80 +1,149 @@
 package policy
 
-import "time"
+import (
+	"os"
+	"path/filepath"
 
-// EnvironmentType represents the type of environment
-type EnvironmentType string
-
-const (
-    EnvironmentDev     EnvironmentType = "dev"
-    EnvironmentStaging EnvironmentType = "staging"
-    EnvironmentProd    EnvironmentType = "prod"
-    EnvironmentUnknown EnvironmentType = "unknown"
+	"gopkg.in/yaml.v3"
 )
 
-// SecurityLevel represents the security posture
-type SecurityLevel string
-
-const (
-    SecurityLevelLow    SecurityLevel = "low"
-    SecurityLevelMedium SecurityLevel = "medium"
-    SecurityLevelHigh   SecurityLevel = "high"
-)
-
-// EnvironmentContext contains detected environment information
-type EnvironmentContext struct {
-    Namespace              string              `json:"namespace"`
-    EnvironmentType        EnvironmentType     `json:"environmentType"`
-    SecurityLevel          SecurityLevel       `json:"securityLevel"`
-    RiskTolerance          string              `json:"riskTolerance"`
-    ComplianceRequirements []string            `json:"complianceRequirements"`
-    Confidence             float64             `json:"confidence"`
-    DetectedAt             time.Time           `json:"detectedAt"`
-    Labels                 map[string]string   `json:"labels"`
-}
-
-// PolicyTemplate represents a security policy template
+// PolicyTemplate represents a complete policy template
 type PolicyTemplate struct {
-    Name               string             `json:"name" yaml:"name"`
-    Version            string             `json:"version" yaml:"version"`
-    Environment        EnvironmentType    `json:"environment" yaml:"environment"`
-    Description        string             `json:"description" yaml:"description"`
-    IcapConfig         IcapConfiguration  `json:"icapConfig" yaml:"icapConfig"`
-    PerformanceConfig  PerformanceConfig  `json:"performanceConfig" yaml:"performanceConfig"`
-    ComplianceConfig   ComplianceConfig   `json:"complianceConfig" yaml:"complianceConfig"`
+	// Metadata
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description" json:"description"`
+	Version     string `yaml:"version" json:"version"`
+
+	// Target environment
+	TargetEnvironment string `yaml:"target_environment" json:"target_environment"`
+
+	// Risk level
+	RiskLevel string `yaml:"risk_level" json:"risk_level"` // low, medium, high
+
+	// Enforcement settings
+	Enforcement EnforcementConfig `yaml:"enforcement" json:"enforcement"`
+
+	// Pod Security configuration
+	PodSecurity PodSecurityConfig `yaml:"pod_security" json:"pod_security"`
+
+	// RBAC configuration
+	RBAC RBACConfig `yaml:"rbac" json:"rbac"`
+
+	// Network configuration
+	Network NetworkConfig `yaml:"network" json:"network"`
+
+	// Secrets configuration
+	Secrets SecretsConfig `yaml:"secrets" json:"secrets"`
+
+	// Resources configuration
+	Resources ResourcesConfig `yaml:"resources" json:"resources"`
+
+	// Compliance configuration
+	Compliance ComplianceConfig `yaml:"compliance" json:"compliance"`
 }
 
-// IcapConfiguration contains ICAP-specific settings
-type IcapConfiguration struct {
-    ScanningMode        string              `json:"scanningMode" yaml:"scanningMode"`
-    MaxFileSize         string              `json:"maxFileSize" yaml:"maxFileSize"`
-    VirusScanConfig     VirusScanConfig     `json:"virusScanConfig" yaml:"virusScanConfig"`
-    ContentFilterConfig ContentFilterConfig `json:"contentFilterConfig" yaml:"contentFilterConfig"`
+// EnforcementConfig defines how the policy should be enforced
+type EnforcementConfig struct {
+	Mode string `yaml:"mode" json:"mode"` // audit, enforce, strict
 }
 
-// VirusScanConfig contains virus scanning settings
-type VirusScanConfig struct {
-    Enabled bool   `json:"enabled" yaml:"enabled"`
-    Engine  string `json:"engine" yaml:"engine"`
-    Action  string `json:"action" yaml:"action"`
+// PodSecurityConfig defines pod security settings
+type PodSecurityConfig struct {
+	Standard               string   `yaml:"standard" json:"standard"`                                 // privileged, baseline, restricted
+	AllowPrivileged        bool     `yaml:"allow_privileged" json:"allow_privileged"`
+	AllowHostNetwork       bool     `yaml:"allow_host_network" json:"allow_host_network"`
+	AllowHostPID           bool     `yaml:"allow_host_pid" json:"allow_host_pid"`
+	AllowHostIPC           bool     `yaml:"allow_host_ipc" json:"allow_host_ipc"`
+	AllowHostPath          bool     `yaml:"allow_host_path" json:"allow_host_path"`
+	RequireRunAsNonRoot    bool     `yaml:"require_run_as_non_root" json:"require_run_as_non_root"`
+	RequireReadOnlyRoot    bool     `yaml:"require_read_only_root" json:"require_read_only_root"`
+	RequireDropAll         bool     `yaml:"require_drop_all" json:"require_drop_all"`
+	AllowedCapabilities    []string `yaml:"allowed_capabilities" json:"allowed_capabilities"`
+	RequireSeccompProfile  bool     `yaml:"require_seccomp_profile" json:"require_seccomp_profile"`
+	RequireAppArmorProfile bool     `yaml:"require_apparmor_profile" json:"require_apparmor_profile"`
 }
 
-// ContentFilterConfig contains content filtering settings
-type ContentFilterConfig struct {
-    Enabled               bool     `json:"enabled" yaml:"enabled"`
-    BlockedTypes          []string `json:"blockedTypes" yaml:"blockedTypes"`
-    SensitiveDataScanning bool     `json:"sensitiveDataScanning" yaml:"sensitiveDataScanning"`
+// RBACConfig defines RBAC settings
+type RBACConfig struct {
+	AllowClusterAdmin       bool `yaml:"allow_cluster_admin" json:"allow_cluster_admin"`
+	AllowWildcardPermissions bool `yaml:"allow_wildcard_permissions" json:"allow_wildcard_permissions"`
+	RequireDedicatedSA      bool `yaml:"require_dedicated_sa" json:"require_dedicated_sa"`
+	DisableAutoMount        bool `yaml:"disable_auto_mount" json:"disable_auto_mount"`
 }
 
-// PerformanceConfig contains performance-related settings
-type PerformanceConfig struct {
-    Timeout       int `json:"timeout" yaml:"timeout"`
-    MaxConcurrent int `json:"maxConcurrent" yaml:"maxConcurrent"`
-    PreviewSize   int `json:"previewSize" yaml:"previewSize"`
+// NetworkConfig defines network policy settings
+type NetworkConfig struct {
+	RequireNetworkPolicies bool `yaml:"require_network_policies" json:"require_network_policies"`
+	RequireDefaultDeny     bool `yaml:"require_default_deny" json:"require_default_deny"`
+	AllowExternalEgress    bool `yaml:"allow_external_egress" json:"allow_external_egress"`
 }
 
-// ComplianceConfig contains compliance requirements
+// SecretsConfig defines secrets management settings
+type SecretsConfig struct {
+	AllowSecretsAsEnvVars       bool `yaml:"allow_secrets_as_env_vars" json:"allow_secrets_as_env_vars"`
+	RequireExternalSecretsManager bool `yaml:"require_external_secrets_manager" json:"require_external_secrets_manager"`
+	RequireEncryptionAtRest     bool `yaml:"require_encryption_at_rest" json:"require_encryption_at_rest"`
+}
+
+// ResourcesConfig defines resource quota and limit settings
+type ResourcesConfig struct {
+	RequireResourceQuota  bool `yaml:"require_resource_quota" json:"require_resource_quota"`
+	RequireLimitRange     bool `yaml:"require_limit_range" json:"require_limit_range"`
+	RequireResourceLimits bool `yaml:"require_resource_limits" json:"require_resource_limits"`
+}
+
+// ComplianceConfig defines compliance framework requirements
 type ComplianceConfig struct {
-    Standards    []string `json:"standards" yaml:"standards"`
-    Requirements []string `json:"requirements" yaml:"requirements"`
+	Standards []string `yaml:"standards" json:"standards"` // cis, pci-dss, soc2, iso27001
+}
+
+// LoadPolicyTemplates loads all policy templates from the templates directory
+func LoadPolicyTemplates() ([]*PolicyTemplate, error) {
+	templatesDir := "policies/templates"
+
+	templates := []*PolicyTemplate{}
+
+	// Read all YAML files in templates directory
+	entries, err := os.ReadDir(templatesDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		// Only process YAML files
+		if filepath.Ext(entry.Name()) != ".yaml" && filepath.Ext(entry.Name()) != ".yml" {
+			continue
+		}
+
+		// Load template
+		templatePath := filepath.Join(templatesDir, entry.Name())
+		template, err := LoadPolicyTemplate(templatePath)
+		if err != nil {
+			// Skip files that can't be loaded
+			continue
+		}
+
+		templates = append(templates, template)
+	}
+
+	return templates, nil
+}
+
+// LoadPolicyTemplate loads a single policy template from a file
+func LoadPolicyTemplate(filepath string) (*PolicyTemplate, error) {
+	data, err := os.ReadFile(filepath)
+	if err != nil {
+		return nil, err
+	}
+
+	var template PolicyTemplate
+	if err := yaml.Unmarshal(data, &template); err != nil {
+		return nil, err
+	}
+
+	return &template, nil
 }
