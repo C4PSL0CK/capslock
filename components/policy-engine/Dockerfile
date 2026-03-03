@@ -1,35 +1,49 @@
-# Policy Engine Dockerfile
-FROM golang:1.21-alpine AS builder
+# Multi-stage build for EAPE Policy Engine
 
-WORKDIR /app
+# Stage 1: Build Go binary
+FROM golang:1.21-alpine AS go-builder
 
-# Copy go mod and sum files
+WORKDIR /build
+
+# Copy Go modules
 COPY go.mod go.sum ./
-
-# Download dependencies
 RUN go mod download
 
 # Copy source code
-COPY root/ ./root/
-COPY templates/ ./templates/
-COPY validator/ ./validator/
+COPY cmd/ ./cmd/
+COPY pkg/ ./pkg/
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./root/
+# Build the CLI binary
+RUN CGO_ENABLED=0 GOOS=linux go build -o policy-engine ./cmd/policy-engine
 
-# Final stage
-FROM alpine:latest
+# Stage 2: Python API
+FROM python:3.11-slim
 
-RUN apk --no-cache add ca-certificates
+WORKDIR /app
 
-WORKDIR /root/
+# Install dependencies
+COPY api/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the binary and templates
-COPY --from=builder /app/main .
-COPY --from=builder /app/templates ./templates/
+# Copy Go binary from builder
+COPY --from=go-builder /build/policy-engine /app/bin/policy-engine
 
-# Expose port
-EXPOSE 8081
+# Copy Python API
+COPY api/main.py ./
 
-# Run the binary
-CMD ["./main"]
+# Copy policy templates
+COPY policies/ ./policies/
+
+# Expose API port
+EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/app/bin:${PATH}"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import requests; requests.get('http://localhost:8000/')"
+
+# Run the FastAPI server
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
