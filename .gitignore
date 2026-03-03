@@ -1,9 +1,14 @@
+# Python
+__pycache__/
+*.pyc
 
-# Python Virtual Environments
+# Virtual environments
 venv/
 env/
-*.pyc
-__pycache__/
+.env/
+
+# Runtime state
+state.json
 
 # IDE
 .vscode/
