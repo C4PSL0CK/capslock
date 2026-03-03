@@ -1,0 +1,9 @@
+apiVersion: security.capslock.io/v1alpha1
+kind: ICAPService
+metadata:
+  labels:
+    app.kubernetes.io/name: capslock-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: icapservice-sample
+spec:
+  # TODO(user): Add fields here
