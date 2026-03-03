@@ -34,6 +34,11 @@ func NewPolicyEngine(clientset *kubernetes.Clientset) *PolicyEngine {
 	}
 }
 
+// GetDetector returns the detector instance
+func (pe *PolicyEngine) GetDetector() *detector.Detector {
+	return pe.detector
+}
+
 // ApplyPolicyToNamespace applies the appropriate policy to a namespace
 func (pe *PolicyEngine) ApplyPolicyToNamespace(ctx context.Context, namespace string) (*WorkflowResult, error) {
 	result := &WorkflowResult{

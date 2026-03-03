@@ -1,38 +1,108 @@
-name: staging-policy
-version: "1.0"
-environment: staging
-description: Staging environment policy with moderate restrictions and compliance testing
+# Staging Environment Policy Template
+name: "staging-policy"
+description: "Security policy for staging environments - pre-production security"
+version: "1.0.0"
+target_environment: "staging"
+risk_level: "medium"
 
-icapConfig:
-  scanningMode: warn
-  maxFileSize: 50MB
-  virusScanConfig:
-    enabled: true
-    engine: clamav
-    action: warn
-  contentFilterConfig:
-    enabled: true
-    blockedTypes:
-      - "application/x-msdownload"
-      - "application/x-executable"
-    sensitiveDataScanning: true
+enforcement:
+  mode: "enforce"  # Staging enforces policies
 
-performanceConfig:
-  timeout: 20
-  maxConcurrent: 8
-  previewSize: 512
+# Pod Security Configuration
+pod_security:
+  standard: "restricted"  # Restricted for staging
+  allow_privileged: false
+  allow_host_network: false
+  allow_host_pid: false
+  allow_host_ipc: false
+  allow_host_path: false
+  require_run_as_non_root: true
+  require_read_only_root: true
+  require_drop_all: true
+  allowed_capabilities: []  # No additional capabilities
+  require_seccomp_profile: true
+  require_apparmor_profile: true
 
-complianceConfig:
+# RBAC Configuration
+rbac:
+  allow_cluster_admin: false
+  allow_wildcard_permissions: false
+  require_dedicated_sa: true
+  disable_auto_mount: true
+
+# Network Configuration
+network:
+  require_network_policies: true
+  require_default_deny: true
+  allow_external_egress: true  # Still allow external for staging
+
+# Secrets Configuration
+secrets:
+  allow_secrets_as_env_vars: false        # No env vars in staging
+  require_external_secrets_manager: true  # Require external secrets
+  require_encryption_at_rest: true
+
+# Resources Configuration
+resources:
+  require_resource_quota: true
+  require_limit_range: true
+  require_resource_limits: true
+
+# Compliance Configuration
+compliance:
   standards:
-    - iso27001
-    - soc2
-  requirements:
-    - "ISO 27001: Malware detection and warnings"
-    - "SOC 2: Audit logging for testing compliance"
-  controls:
-    encryption: recommended
-    auditLogging: required
-    accessControl: recommended
-    malwareScanning: required
-    dataProtection: recommended
-    sensitiveDataScanning: true
+    - "cis"
+    - "pci-dss"  # PCI-DSS applies to staging
+  
+  cis_controls:
+    # Section 4.1 - RBAC (8 checks) - FULL compliance
+    - "4.1.1"  # Cluster-admin restriction
+    - "4.1.2"  # Secrets access minimization
+    - "4.1.3"  # Wildcard minimization
+    - "4.1.4"  # SA not bound to cluster-admin
+    - "4.1.5"  # Default SA not used
+    - "4.1.6"  # SA tokens not auto-mounted
+    - "4.1.7"  # SA credentials not in config
+    - "4.1.8"  # Dashboard secured
+    
+    # Section 4.2 - Pod Security (12 checks) - FULL compliance
+    - "4.2.1"   # No privileged
+    - "4.2.2"   # No host path
+    - "4.2.3"   # No hostNetwork
+    - "4.2.4"   # No hostPID
+    - "4.2.5"   # No hostIPC
+    - "4.2.6"   # AppArmor profiles
+    - "4.2.7"   # Seccomp profiles
+    - "4.2.8"   # Run as non-root
+    - "4.2.9"   # Read-only root
+    - "4.2.10"  # Resource limits
+    - "4.2.11"  # Drop ALL capabilities
+    - "4.2.12"  # No dangerous capabilities
+    
+    # Section 4.3 - Network (3 checks) - FULL compliance
+    - "4.3.1"  # CNI supports policies
+    - "4.3.2"  # Network policies defined
+    - "4.3.3"  # Default deny policy
+    
+    # Section 4.4 - Secrets (2 checks) - FULL compliance
+    - "4.4.1"  # Secrets not as env vars
+    - "4.4.2"  # External secrets manager
+    
+    # Section 4.5 - Namespace (3 checks) - FULL compliance
+    - "4.5.1"  # Default namespace not used
+    - "4.5.2"  # Resource quotas defined
+    - "4.5.3"  # LimitRanges defined
+  
+  pci_dss_requirements:
+    - "1.2.1"   # Network security controls
+    - "2.2.2"   # Default accounts managed
+    - "2.2.4"   # Security parameters configured
+    - "3.4.1"   # Encryption at rest
+    - "3.5.1"   # Key management
+    - "3.6.1"   # Key storage
+    - "4.2.1"   # TLS encryption
+    - "7.1.1"   # Access control configured
+    - "7.2.2"   # Access by job function
+    - "8.2.1"   # Strong authentication
+    - "8.6.1"   # System accounts managed
+    - "10.2.1"  # Audit logs implemented
