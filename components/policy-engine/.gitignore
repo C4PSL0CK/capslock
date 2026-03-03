@@ -49,3 +49,5 @@ venv/
 api/venv/
 __pycache__/
 *.pyc
+api/venv/
+api/__pycache__/
