@@ -4,6 +4,32 @@ import os
 import requests
 import time
 import json
+import logging
+from datetime import datetime, timezone
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
+logger = logging.getLogger("ssdlb-controller")
+logger.setLevel(LOG_LEVEL)
+
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setLevel(LOG_LEVEL)
+    logger.addHandler(handler)
+
+def log_event(event: str, **fields):
+    """
+    Structured JSON logging (one line per event).
+    Use this for decisions, guardrail triggers, and routing changes.
+    """
+    payload = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "component": "ssdlb-controller",
+        "event": event,
+        **fields,
+    }
+    # Ensure it's always JSON even if some fields are non-serializable
+    logger.info(json.dumps(payload, default=str))
 
 PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
 
@@ -11,10 +37,20 @@ PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "60"))
 MIN_CHANGE_RATIO = float(os.getenv("MIN_CHANGE_RATIO", "0.20"))  # 20% improvement required
 
-MIN_TOTAL_RATE = float(os.getenv("MIN_TOTAL_RATE", "0.05"))  # minimum traffic required
-MIN_METRIC_WINDOW_SECONDS = int(os.getenv("MIN_METRIC_WINDOW_SECONDS", "120"))
 
-TREND_GROWTH_RATIO = float(os.getenv("TREND_GROWTH_RATIO", "0.30"))  # 30% spike triggers spread
+SPREAD_MIN_SECONDS = int(os.getenv("SPREAD_MIN_SECONDS", "60"))          # stay in spread at least this long
+RECOVERY_STABLE_SECONDS = int(os.getenv("RECOVERY_STABLE_SECONDS", "120")) # require stable window before collapsing
+RECOVERY_GROWTH_RATIO = float(os.getenv("RECOVERY_GROWTH_RATIO", "0.02"))  # spike considered "gone" when growth <= this
+
+
+MIN_TOTAL_RATE = float(os.getenv("MIN_TOTAL_RATE", "0.05"))  # minimum traffic required
+MIN_METRIC_WINDOW_SECONDS = int(os.getenv("MIN_METRIC_WINDOW_SECONDS", "10"))
+
+# Hysteresis thresholds:
+# - ENTER should be higher (harder to enter spread)
+# - EXIT should be lower (easier to exit spread once stable)
+TREND_ENTER_GROWTH_RATIO = float(os.getenv("TREND_ENTER_GROWTH_RATIO", "0.08"))
+TREND_EXIT_GROWTH_RATIO  = float(os.getenv("TREND_EXIT_GROWTH_RATIO",  "0.03"))
 
 app = FastAPI()
 
@@ -27,7 +63,12 @@ ALLOWED_VERSIONS = {"a", "b", "c"}
 
 def load_state():
     # Default state
-    state = {"last_selected": None, "last_switch_ts": 0}
+    state = {
+    "mode": "single",          # "single" or "spread"
+    "last_selected": None,     # "a" / "b" / "c" / "spread"
+    "last_switch_ts": 0,       # unix timestamp
+    "spread_since_ts": 0       # when we entered spread mode
+}
 
     if not os.path.exists(STATE_FILE):
         return state
@@ -70,6 +111,8 @@ def set_version(version: str):
     if not os.path.exists(path):
         return {"error": "dr file not found", "path": path}
 
+    log_event("manual_set_version_requested", version=version, dr_path=path)
+
     result = subprocess.run(
         ["kubectl", "apply", "-f", path],
         capture_output=True,
@@ -77,7 +120,10 @@ def set_version(version: str):
     )
 
     if result.returncode != 0:
+        log_event("manual_set_version_failed", version=version, error=result.stderr)
         return {"error": result.stderr}
+
+    log_event("manual_set_version_applied", version=version)
 
     # Update state (manual switch counts as a switch)
     state = load_state()
@@ -143,7 +189,7 @@ def detect_rising_trend():
 
     growth = (short_rate - medium_rate) / medium_rate
 
-    return growth > TREND_GROWTH_RATIO, short_rate, medium_rate
+    return growth >= TREND_ENTER_GROWTH_RATIO, short_rate, medium_rate
 
 
 @app.get("/trend-debug")
@@ -160,7 +206,8 @@ def trend_debug():
         "short_rate_1m": short_rate,
         "medium_rate_5m": medium_rate,
         "growth_ratio": growth,
-        "threshold": TREND_GROWTH_RATIO
+        "enter_threshold": TREND_ENTER_GROWTH_RATIO,
+        "exit_threshold": TREND_EXIT_GROWTH_RATIO
     }
 
 
@@ -175,53 +222,151 @@ def apply_version(version: str):
 
 @app.post("/auto-route")
 def auto_route():
-    # 1) Load persisted state
     state = load_state()
     now = int(time.time())
-
-    # Observation window guardrail
+    log_event("auto_route_called", state=state, now=now)
+   
+    # Observation window
     if state["last_switch_ts"] == 0:
         state["last_switch_ts"] = now
         save_state(state)
-        return {"status": "warming-up", "required_seconds": MIN_METRIC_WINDOW_SECONDS}
 
-    if (now - int(state["last_switch_ts"])) < MIN_METRIC_WINDOW_SECONDS:
+        log_event(
+            "guardrail_initial_warmup",
+            required_seconds=MIN_METRIC_WINDOW_SECONDS,
+            state=state
+        )
+
         return {
             "status": "warming-up",
-            "seconds_elapsed": now - int(state["last_switch_ts"]),
             "required_seconds": MIN_METRIC_WINDOW_SECONDS
         }
 
-    # Cooldown guardrail
+    if (now - int(state["last_switch_ts"])) < MIN_METRIC_WINDOW_SECONDS:
+        elapsed = now - int(state["last_switch_ts"])
+
+        log_event(
+            "guardrail_warming_up",
+            seconds_elapsed=elapsed,
+            required_seconds=MIN_METRIC_WINDOW_SECONDS,
+            state=state
+        )
+
+        return {
+            "status": "warming-up",
+            "seconds_elapsed": elapsed,
+            "required_seconds": MIN_METRIC_WINDOW_SECONDS
+        }
+
+    # Cooldown
     if state["last_selected"] and (now - int(state["last_switch_ts"])) < COOLDOWN_SECONDS:
         remaining = COOLDOWN_SECONDS - (now - int(state["last_switch_ts"]))
+
+        log_event(
+            "guardrail_cooldown",
+            seconds_remaining=remaining,
+            last_selected=state.get("last_selected"),
+            state=state
+        )
+
         return {
             "status": "cooldown",
             "last_selected": state["last_selected"],
             "seconds_remaining": remaining
         }
 
-    # Query metrics safely
+    # Query rates
     try:
         rates = get_request_rates()
     except Exception as e:
         return {"status": "no-metrics", "reason": str(e)}
 
-    if not rates:
-        return {"status": "no-metrics", "reason": "empty rates"}
+    try:
+        rising, short_rate, medium_rate = detect_rising_trend()
+    except Exception:
+        rising = False
+        short_rate = 0.0
+        medium_rate = 0.0
 
-    # Traffic presence guardrail
-    total_rate = sum(rates.values())
-    if total_rate < MIN_TOTAL_RATE:
+    # ------------------------
+    # SPREAD MODE RECOVERY LOGIC
+    # ------------------------
+    if state.get("mode") == "spread":
+        spread_since = int(state.get("spread_since_ts") or now)
+
+        if (now - spread_since) < SPREAD_MIN_SECONDS:
+            return {
+                "status": "spread-hold",
+                "seconds_in_spread": now - spread_since,
+                "min_seconds": SPREAD_MIN_SECONDS
+            }
+
+        log_event(
+            "spread_continue",
+            short_rate=short_rate,
+            medium_rate=medium_rate,
+            exit_threshold=TREND_EXIT_GROWTH_RATIO,
+            state=state
+        )
+
+
+        if rising:
+            return {
+                "status": "spread-continue",
+                "short_rate": short_rate,
+                "medium_rate": medium_rate
+            }
+
+        if medium_rate <= 0:
+            return {
+                "status": "spread-continue",
+                "reason": "medium_rate_zero"
+            }
+
+        growth_ratio = (short_rate - medium_rate) / medium_rate
+
+        if growth_ratio > TREND_EXIT_GROWTH_RATIO:
+            return {
+                "status": "spread-continue",
+                "growth_ratio": growth_ratio,
+                "exit_threshold": TREND_EXIT_GROWTH_RATIO,
+                "short_rate": short_rate,
+                "medium_rate": medium_rate
+            }
+
+        # Collapse back to single
+        if not rates:
+            return {"status": "no-metrics", "reason": "empty rates"}
+
+        selected = min(rates, key=rates.get)
+        result = apply_version(selected)
+
+        if result.returncode != 0:
+            return {"status": "error", "kubectl": result.stderr}
+
+        state["mode"] = "single"
+        state["last_selected"] = selected
+        state["last_switch_ts"] = now
+        state["spread_since_ts"] = 0
+        save_state(state)
+
+        log_event(
+            "recovered_to_single",
+            selected=selected,
+            rates=rates,
+            exit_threshold=TREND_EXIT_GROWTH_RATIO,
+            state=state
+        )
+
         return {
-            "status": "low-traffic",
-            "total_rate": total_rate,
-            "threshold": MIN_TOTAL_RATE
+            "status": "recovered-to-single",
+            "selected": selected,
+            "rates": rates
         }
 
-    # Predictive Trend Detection
-    rising, short_rate, medium_rate = detect_rising_trend()
-
+    # ------------------------
+    # PREDICTIVE SPREAD ENTRY
+    # ------------------------
     if rising:
         result = subprocess.run(
             ["kubectl", "apply", "-f", os.path.join(DR_DIR, "dr-spread.yaml")],
@@ -232,21 +377,49 @@ def auto_route():
         if result.returncode != 0:
             return {"status": "error", "kubectl": result.stderr}
 
+        state["mode"] = "spread"
         state["last_selected"] = "spread"
         state["last_switch_ts"] = now
+        state["spread_since_ts"] = now
         save_state(state)
+
+        log_event(
+            "predictive_spread_entered",
+            short_rate=short_rate,
+            medium_rate=medium_rate,
+            enter_threshold=TREND_ENTER_GROWTH_RATIO if "TREND_ENTER_GROWTH_RATIO" in globals() else None,
+            state_before=state,
+        )
 
         return {
             "status": "predictive-spread",
             "short_rate": short_rate,
-            "medium_rate": medium_rate,
-            "growth_threshold": TREND_GROWTH_RATIO
+            "medium_rate": medium_rate
         }
 
-    # Choose least-loaded version
+    # ------------------------
+    # NORMAL SINGLE MODE LOGIC
+    # ------------------------
+    if not rates:
+        return {"status": "no-metrics", "reason": "empty rates"}
+
+    total_rate = sum(rates.values())
+    if total_rate < MIN_TOTAL_RATE:
+        log_event(
+            "guardrail_low_traffic",
+            total_rate=total_rate,
+            threshold=MIN_TOTAL_RATE,
+            rates=rates,
+            state=state
+        )
+        return {
+            "status": "low-traffic",
+            "total_rate": total_rate,
+            "threshold": MIN_TOTAL_RATE
+        }
+
     selected = min(rates, key=rates.get)
 
-    # Minimum-change threshold
     last = state["last_selected"]
     if last in rates and last != selected:
         last_rate = rates[last]
@@ -258,7 +431,18 @@ def auto_route():
             improvement_ratio = 1.0
 
         if improvement_ratio < MIN_CHANGE_RATIO:
-            return {
+ 
+           log_event(
+               "no_switch_min_change",
+               last_selected=last,
+               candidate=selected,
+               improvement_ratio=improvement_ratio,
+               threshold=MIN_CHANGE_RATIO,
+               rates=rates,
+               state=state
+           )
+
+           return {
                 "status": "no-switch",
                 "reason": "min-change-threshold",
                 "rates": rates,
@@ -267,12 +451,11 @@ def auto_route():
                 "improvement_ratio": improvement_ratio
             }
 
-    # Apply routing
     result = apply_version(selected)
     if result.returncode != 0:
         return {"status": "error", "kubectl": result.stderr}
 
-    # Persist state
+    state["mode"] = "single"
     state["last_selected"] = selected
     state["last_switch_ts"] = now
     save_state(state)
@@ -280,8 +463,5 @@ def auto_route():
     return {
         "status": "ok",
         "rates": rates,
-        "selected": selected,
-        "applied": f"dr-files/dr-{selected}.yaml",
-        "cooldown_seconds": COOLDOWN_SECONDS,
-        "min_change_ratio": MIN_CHANGE_RATIO
+        "selected": selected
     }
