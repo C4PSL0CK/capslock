@@ -1,0 +1,429 @@
+const API_BASE = `http://${window.location.hostname}:${window.location.port}/api`;
+
+let policies = [];
+let promotions = [];
+let currentTab = 'dashboard';
+let auditRefreshTimer = null;
+
+// --- SVG icon library ---
+const ICONS = {
+    moon: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`,
+    sun: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`,
+    shieldCheck: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>`,
+    shieldAlert: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill="currentColor"/></svg>`,
+    alertTriangle: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>`,
+    undo: `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`,
+};
+
+// --- Event type metadata ---
+const EVENT_META = {
+    promotion_approved:   { dot: '#10b981', label: 'Approved',    rowClass: 'audit-row-approved' },
+    promotion_rejected:   { dot: '#ef4444', label: 'Rejected',    rowClass: 'audit-row-rejected' },
+    icap_threat_detected: { dot: '#f59e0b', label: 'ICAP Threat', rowClass: 'audit-row-threat'   },
+    policy_rollback:      { dot: '#667eea', label: 'Rollback',    rowClass: 'audit-row-rollback'  },
+    promotion_created:    { dot: '#9ca3af', label: 'Created',     rowClass: ''                    },
+};
+
+// --- Core data loading ---
+async function loadData() {
+    try {
+        const [policiesRes, promotionsRes, analyticsRes] = await Promise.all([
+            fetch(`${API_BASE}/policies`),
+            fetch(`${API_BASE}/promotions`),
+            fetch(`${API_BASE}/analytics`),
+        ]);
+
+        policies = await policiesRes.json();
+        promotions = await promotionsRes.json();
+        const analytics = await analyticsRes.json();
+
+        renderPolicies();
+        renderPromotions();
+        updateStats(analytics);
+    } catch (error) {
+        console.error('Failed to load data:', error);
+    }
+}
+
+function renderPolicies() {
+    const selector = document.getElementById('policy-selector');
+    selector.innerHTML = policies.map(p => `
+        <div class="policy-item">
+            <label>
+                <input type="checkbox" name="policy" value="${p.name}">
+                <span><strong>${p.name}</strong> — ${p.description} <span class="severity-tag severity-${p.severity}">${p.severity}</span></span>
+            </label>
+        </div>
+    `).join('');
+}
+
+function renderPromotions() {
+    const list = document.getElementById('promotions-list');
+    if (promotions.length === 0) {
+        list.innerHTML = '<p class="empty-state">No promotions yet</p>';
+        return;
+    }
+
+    list.innerHTML = promotions.map(p => `
+        <div class="promotion-item">
+            <div>
+                <strong>${p.name}</strong>
+                <br>
+                <small class="text-muted">${p.source} → ${p.target} &nbsp;|&nbsp; ${p.version} &nbsp;|&nbsp; Risk: ${p.risk_score ?? '—'}</small>
+            </div>
+            <span class="badge badge-${p.decision === 'APPROVED' ? 'approved' : 'rejected'}">${p.decision}</span>
+        </div>
+    `).join('');
+}
+
+function updateStats(analytics) {
+    document.getElementById('total-promotions').textContent = analytics.total_promotions;
+    document.getElementById('approved').textContent = analytics.approved;
+    document.getElementById('rejected').textContent = analytics.rejected;
+    document.getElementById('avg-risk').textContent = analytics.average_risk_score;
+}
+
+// --- Promotion form submit ---
+document.getElementById('promotion-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const selectedPolicies = Array.from(document.querySelectorAll('input[name="policy"]:checked'))
+        .map(cb => cb.value);
+
+    const data = {
+        name: document.getElementById('name').value,
+        application_name: document.getElementById('app-name').value,
+        source_environment: document.getElementById('source-env').value,
+        target_environment: document.getElementById('target-env').value,
+        version: document.getElementById('version').value,
+        add_policies: selectedPolicies,
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/promotions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+
+        const result = await response.json();
+        showResult(result);
+        document.getElementById('promotion-form').reset();
+        await loadData();
+    } catch (error) {
+        alert('Failed to create promotion: ' + error.message);
+    }
+});
+
+// --- Result modal ---
+function showResult(result) {
+    const modal = document.getElementById('result-modal');
+    const details = document.getElementById('result-details');
+    const decisionClass = result.decision === 'APPROVED' ? 'success' : 'danger';
+    const icap = result.icap_scan;
+
+    // Build ICAP card
+    let icapClass, icapIcon, icapStatusText, icapStatusColor;
+    if (icap.threat_found) {
+        icapClass = 'threat';
+        icapIcon = ICONS.shieldAlert;
+        icapStatusText = `Threat detected: ${icap.threat_type}`;
+        icapStatusColor = '#ef4444';
+    } else if (icap.low_coverage_warning) {
+        icapClass = 'warning';
+        icapIcon = ICONS.alertTriangle;
+        icapStatusText = 'Clean — low coverage warning';
+        icapStatusColor = '#f59e0b';
+    } else {
+        icapClass = 'clean';
+        icapIcon = ICONS.shieldCheck;
+        icapStatusText = 'Clean';
+        icapStatusColor = '#10b981';
+    }
+
+    const coverageFillClass = icap.coverage_score >= 75 ? 'coverage-good' : 'coverage-warn';
+
+    const icapCard = `
+        <div class="icap-card ${icapClass}">
+            <div class="icap-header">
+                <span style="color:${icapStatusColor}">${icapIcon}</span>
+                <span class="icap-title">ICAP Content Scan</span>
+            </div>
+            <div class="icap-status" style="color:${icapStatusColor}">${icapStatusText}</div>
+            <div class="icap-coverage-row">
+                <span class="icap-coverage-label">Coverage: ${icap.coverage_score}/100</span>
+                <div class="coverage-bar">
+                    <div class="coverage-fill ${coverageFillClass}" style="width:${icap.coverage_score}%"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Build risk section (null when ICAP rejected)
+    let riskSection = '';
+    if (result.risk_assessment) {
+        riskSection = `
+            <h3 class="section-title">Risk Assessment</h3>
+            <p class="result-message">${result.message}</p>
+            ${result.risk_assessment.factors.map(f => `
+                <div class="risk-factor">
+                    <div class="risk-factor-name">${f.name.replace(/_/g, ' ')}</div>
+                    <div class="risk-factor-score">${Math.round(f.weighted_score)} pts</div>
+                    <div class="risk-factor-reason">${f.reason}</div>
+                </div>
+            `).join('')}
+        `;
+    } else {
+        riskSection = `<p class="result-message">${result.message}</p>`;
+    }
+
+    const scoreLabel = icap.threat_found
+        ? 'ICAP rejection — risk score not computed'
+        : `Risk score: ${result.risk_score} / ${result.max_allowed}`;
+
+    details.innerHTML = `
+        <h2>Promotion Result</h2>
+        <div class="stat-card ${decisionClass}" style="margin-bottom:20px;">
+            <div class="stat-value">${result.decision}</div>
+            <div class="stat-label">${scoreLabel}</div>
+        </div>
+        ${icapCard}
+        ${riskSection}
+    `;
+
+    modal.style.display = 'block';
+}
+
+document.querySelector('.close').addEventListener('click', () => {
+    document.getElementById('result-modal').style.display = 'none';
+});
+
+window.addEventListener('click', (e) => {
+    const modal = document.getElementById('result-modal');
+    if (e.target === modal) modal.style.display = 'none';
+});
+
+// --- Tab navigation ---
+function switchTab(name) {
+    currentTab = name;
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById(`tab-${name}`).classList.remove('hidden');
+    document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+
+    clearInterval(auditRefreshTimer);
+    auditRefreshTimer = null;
+
+    if (name === 'audit') {
+        loadAuditLog();
+        auditRefreshTimer = setInterval(loadAuditLog, 10000);
+    } else if (name === 'versions') {
+        const env = document.getElementById('versions-env-select').value;
+        loadVersions(env);
+    }
+}
+
+// --- Audit log ---
+async function loadAuditLog() {
+    const eventType = document.getElementById('audit-filter').value;
+    const url = eventType
+        ? `${API_BASE}/audit?limit=100&event_type=${eventType}`
+        : `${API_BASE}/audit?limit=100`;
+
+    try {
+        const res = await fetch(url);
+        const events = await res.json();
+        renderAuditLog(events.reverse()); // most recent first
+    } catch (err) {
+        console.error('Failed to load audit log:', err);
+    }
+}
+
+function renderAuditLog(events) {
+    const container = document.getElementById('audit-table');
+    if (events.length === 0) {
+        container.innerHTML = '<p class="empty-state">No audit events yet.</p>';
+        return;
+    }
+
+    const rows = events.map(e => {
+        const meta = EVENT_META[e.event_type] || { dot: '#9ca3af', label: e.event_type, rowClass: '' };
+        const time = formatTime(e.timestamp);
+        const details = formatEventDetails(e);
+        const env = e.environment || '—';
+        const pid = e.promotion_id ? `<code class="mono">${e.promotion_id}</code>` : '—';
+
+        return `
+            <tr class="${meta.rowClass}">
+                <td class="audit-time">${time}</td>
+                <td>
+                    <span class="status-dot" style="background:${meta.dot}"></span>
+                    ${meta.label}
+                </td>
+                <td>${env}</td>
+                <td>${pid}</td>
+                <td class="text-muted">${details}</td>
+            </tr>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Event</th>
+                    <th>Environment</th>
+                    <th>Promotion</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+}
+
+function formatEventDetails(event) {
+    const d = event.details || {};
+    switch (event.event_type) {
+        case 'promotion_approved':
+            return `risk ${d.risk_score ?? '?'}/${d.max_allowed ?? '?'}`;
+        case 'promotion_rejected':
+            return d.reason === 'icap_threat'
+                ? `ICAP: ${d.threat_type || 'unknown'}`
+                : `risk ${d.risk_score ?? '?'}/${d.max_allowed ?? '?'}`;
+        case 'icap_threat_detected':
+            return `${d.threat_type || ''} — coverage ${d.coverage_score ?? '?'}`;
+        case 'policy_rollback':
+            return `to version ${d.version_id || ''}`;
+        case 'promotion_created':
+            return d.decision || '';
+        default:
+            return '';
+    }
+}
+
+// --- Policy versions ---
+async function loadVersions(env) {
+    try {
+        const res = await fetch(`${API_BASE}/environments/${env}/versions`);
+        const versions = await res.json();
+        renderVersions(versions, env);
+    } catch (err) {
+        console.error('Failed to load versions:', err);
+    }
+}
+
+function renderVersions(versions, env) {
+    const container = document.getElementById('versions-table');
+    if (versions.length === 0) {
+        container.innerHTML = '<p class="empty-state">No versions recorded yet. Approve a promotion to create the first policy snapshot.</p>';
+        return;
+    }
+
+    const rows = versions.map((v, i) => {
+        const isCurrent = i === 0;
+        const time = formatDateTime(v.timestamp);
+        const policyCount = v.policies.length;
+        const note = v.note.length > 50 ? v.note.slice(0, 50) + '…' : v.note;
+        const actionCell = isCurrent
+            ? `<span class="badge badge-current">Current</span>`
+            : `<button class="btn-rollback" onclick="confirmRollback('${env}', '${v.version_id}')">
+                   ${ICONS.undo} Rollback
+               </button>`;
+
+        return `
+            <tr>
+                <td><code class="mono">${v.version_id}</code></td>
+                <td>${time}</td>
+                <td class="text-muted">${note || '—'}</td>
+                <td>${policyCount} ${policyCount === 1 ? 'policy' : 'policies'}</td>
+                <td>${actionCell}</td>
+            </tr>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Version ID</th>
+                    <th>Timestamp</th>
+                    <th>Note</th>
+                    <th>Policies</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+}
+
+async function confirmRollback(env, versionId) {
+    const ok = window.confirm(`Restore ${env} to policy version ${versionId}?\n\nThis will replace the current active policies for this environment.`);
+    if (!ok) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/environments/${env}/rollback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version_id: versionId }),
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            showToast(err.detail || 'Rollback failed', 'error');
+            return;
+        }
+
+        showToast(`Rolled back ${env} to version ${versionId}`, 'success');
+        loadVersions(env);
+    } catch (err) {
+        showToast('Rollback failed: ' + err.message, 'error');
+    }
+}
+
+// --- Toast notification ---
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+}
+
+// --- Helpers ---
+function formatTime(isoStr) {
+    return new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatDateTime(isoStr) {
+    return new Date(isoStr).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// --- Theme ---
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeButton(newTheme);
+}
+
+function updateThemeButton(theme) {
+    const btn = document.querySelector('.theme-toggle');
+    if (!btn) return;
+    if (theme === 'dark') {
+        btn.innerHTML = `${ICONS.sun} <span>Light Mode</span>`;
+    } else {
+        btn.innerHTML = `${ICONS.moon} <span>Dark Mode</span>`;
+    }
+}
+
+(function () {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeButton(savedTheme);
+})();
+
+loadData();
