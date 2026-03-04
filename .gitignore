@@ -14,6 +14,9 @@ components/meds-research/data/
 # Runtime state
 state.json
 
+# Secrets
+.env
+
 # IDE
 .vscode/
 .idea/

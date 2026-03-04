@@ -90,7 +90,7 @@ function renderPolicies() {
         <div class="policy-item">
             <label>
                 <input type="checkbox" name="policy" value="${p.name}">
-                <span><strong>${p.name}</strong> — ${p.description} <span class="severity-tag severity-${p.severity}">${p.severity}</span></span>
+                <span><strong>${p.name}</strong>: ${p.description} <span class="severity-tag severity-${p.severity}">${p.severity}</span></span>
             </label>
         </div>
     `).join('');
@@ -108,7 +108,7 @@ function renderPromotions() {
             <div>
                 <strong>${p.name}</strong>
                 <br>
-                <small class="text-muted">${p.source} → ${p.target} &nbsp;|&nbsp; ${p.version} &nbsp;|&nbsp; Risk: ${p.risk_score ?? '—'}</small>
+                <small class="text-muted">${p.source} → ${p.target} &nbsp;|&nbsp; ${p.version} &nbsp;|&nbsp; Risk: ${p.risk_score ?? 'N/A'}</small>
             </div>
             <span class="badge badge-${p.decision === 'APPROVED' ? 'approved' : 'rejected'}">${p.decision}</span>
         </div>
@@ -183,7 +183,7 @@ function showResult(result) {
     } else if (icap.low_coverage_warning) {
         icapClass = 'warning';
         icapIcon = ICONS.alertTriangle;
-        icapStatusText = 'Clean — low coverage warning';
+        icapStatusText = 'Clean (low coverage warning)';
         icapStatusColor = '#f59e0b';
     } else {
         icapClass = 'clean';
@@ -229,7 +229,7 @@ function showResult(result) {
     }
 
     const scoreLabel = icap.threat_found
-        ? 'ICAP rejection — risk score not computed'
+        ? 'ICAP rejection: risk score not computed'
         : `Risk score: ${result.risk_score} / ${result.max_allowed}`;
 
     details.innerHTML = `
@@ -269,13 +269,18 @@ function switchTab(name) {
 
     if (name === 'icap') {
         loadICAPStatus();
-        icapRefreshTimer = setInterval(loadICAPStatus, 15000);
+        icapRefreshTimer = setInterval(loadICAPStatus, 60000);
     } else if (name === 'audit') {
         loadAuditLog();
         auditRefreshTimer = setInterval(loadAuditLog, 10000);
     } else if (name === 'versions') {
         const env = document.getElementById('versions-env-select').value;
         loadVersions(env);
+    } else if (name === 'validation') {
+        loadHealthScenarios();
+        loadTrafficScenarios();
+    } else if (name === 'assistant') {
+        document.getElementById('chat-input').focus();
     }
 }
 
@@ -306,8 +311,8 @@ function renderAuditLog(events) {
         const meta = EVENT_META[e.event_type] || { dot: '#9ca3af', label: e.event_type, rowClass: '' };
         const time = formatTime(e.timestamp);
         const details = formatEventDetails(e);
-        const env = e.environment || '—';
-        const pid = e.promotion_id ? `<code class="mono">${e.promotion_id}</code>` : '—';
+        const env = e.environment || 'N/A';
+        const pid = e.promotion_id ? `<code class="mono">${e.promotion_id}</code>` : 'N/A';
 
         return `
             <tr class="${meta.rowClass}">
@@ -349,7 +354,7 @@ function formatEventDetails(event) {
                 ? `ICAP: ${d.threat_type || 'unknown'}`
                 : `risk ${d.risk_score ?? '?'}/${d.max_allowed ?? '?'}`;
         case 'icap_threat_detected':
-            return `${d.threat_type || ''} — coverage ${d.coverage_score ?? '?'}`;
+            return `${d.threat_type || ''} coverage ${d.coverage_score ?? '?'}`;
         case 'policy_rollback':
             return `to version ${d.version_id || ''}`;
         case 'promotion_created':
@@ -392,7 +397,7 @@ function renderVersions(versions, env) {
             <tr>
                 <td><code class="mono">${v.version_id}</code></td>
                 <td>${time}</td>
-                <td class="text-muted">${note || '—'}</td>
+                <td class="text-muted">${note || 'N/A'}</td>
                 <td>${policyCount} ${policyCount === 1 ? 'policy' : 'policies'}</td>
                 <td>${actionCell}</td>
             </tr>
@@ -487,8 +492,8 @@ function renderICAPStatus(status, health) {
     const scoreClass = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger';
     const ready     = status.ready_replicas   ?? health.ready_replicas   ?? 0;
     const desired   = status.desired_replicas ?? health.desired_replicas ?? 0;
-    const mode      = status.scanning_mode    ?? health.scanning_mode    ?? '—';
-    const source    = status.source           ?? health.source           ?? '—';
+    const mode      = status.scanning_mode    ?? health.scanning_mode    ?? 'N/A';
+    const source    = status.source           ?? health.source           ?? 'N/A';
     const modeClass = mode === 'block' ? 'danger' : mode === 'warn' ? 'warning' : 'success';
 
     document.getElementById('icap-status-panel').innerHTML = `
@@ -584,7 +589,7 @@ document.getElementById('icap-configure-form').addEventListener('submit', async 
             showToast('Configuration applied to K8s cluster', 'success');
             resultEl.innerHTML = `<span style="color:var(--success)">Applied to K8s: ${JSON.stringify(result.patch)}</span>`;
         } else if (result.status === 'applied_local') {
-            showToast('Configuration saved — active immediately', 'success');
+            showToast('Configuration saved, active immediately', 'success');
             const patch = result.patch ?? {};
             resultEl.innerHTML = `<span style="color:var(--success)">Saved: ${JSON.stringify(patch)}</span><br><small class="text-muted">${result.message}</small>`;
         } else {
@@ -620,5 +625,352 @@ function updateThemeButton(theme) {
     document.documentElement.setAttribute('data-theme', savedTheme);
     updateThemeButton(savedTheme);
 })();
+
+// =============================================================================
+// Validation Tab
+// =============================================================================
+
+// --- Risk Score Calculator ---
+document.getElementById('risk-score-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const resultEl = document.getElementById('risk-score-result');
+    resultEl.innerHTML = '<p class="empty-state">Calculating…</p>';
+
+    const body = {
+        version:          document.getElementById('rs-version').value,
+        source_env:       document.getElementById('rs-source-env').value,
+        target_env:       document.getElementById('rs-target-env').value,
+        add_policies:     parseInt(document.getElementById('rs-add-policies').value) || 0,
+        remove_policies:  parseInt(document.getElementById('rs-remove-policies').value) || 0,
+        max_allowed_score: parseInt(document.getElementById('rs-max-score').value) || 60,
+    };
+
+    try {
+        const res = await fetch(`${API_BASE}/demo/risk-score`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        renderRiskScoreResult(data);
+    } catch (err) {
+        resultEl.innerHTML = `<p style="color:var(--danger)">Error: ${err.message}</p>`;
+    }
+});
+
+function renderRiskScoreResult(data) {
+    const el = document.getElementById('risk-score-result');
+    const score = data.total_score;
+    const max   = data.max_allowed;
+    const pct   = Math.min(100, Math.round(score / max * 100));
+    const rec   = data.recommendation || '';
+    const isRej = rec.startsWith('REJECTED');
+    const colour = isRej ? 'var(--danger)' : score > max * 0.8 ? 'var(--warning)' : 'var(--success)';
+
+    const factors = (data.factors || []).map(f => `
+        <tr>
+            <td>${f.name.replace(/_/g,' ')}</td>
+            <td style="text-align:center">${f.score}</td>
+            <td style="text-align:center">${(f.weight * 100).toFixed(0)}%</td>
+            <td style="text-align:center">${f.weighted_score.toFixed(1)}</td>
+            <td style="font-size:0.8rem;color:var(--text-muted)">${f.reason}</td>
+        </tr>`).join('');
+
+    el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:24px;margin-bottom:16px;flex-wrap:wrap">
+            <div style="text-align:center">
+                <div style="font-size:2.5rem;font-weight:700;color:${colour}">${score}</div>
+                <div style="font-size:0.8rem;color:var(--text-muted)">/ ${max} max</div>
+            </div>
+            <div style="flex:1;min-width:160px">
+                <div style="height:12px;background:var(--border);border-radius:6px;overflow:hidden">
+                    <div style="height:100%;width:${pct}%;background:${colour};transition:width .4s"></div>
+                </div>
+                <div style="margin-top:8px;font-weight:600;color:${colour}">${rec}</div>
+            </div>
+        </div>
+        <table class="audit-table" style="width:100%">
+            <thead><tr>
+                <th>Factor</th><th style="text-align:center">Score</th>
+                <th style="text-align:center">Weight</th><th style="text-align:center">Weighted</th>
+                <th>Reason</th>
+            </tr></thead>
+            <tbody>${factors}</tbody>
+        </table>`;
+}
+
+// --- Policy Conflict Detector ---
+document.getElementById('conflict-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const resultEl = document.getElementById('conflict-result');
+    resultEl.innerHTML = '<p class="empty-state">Detecting…</p>';
+
+    const stds = [];
+    if (document.getElementById('cf-pci').checked)  stds.push('pci-dss');
+    if (document.getElementById('cf-cis').checked)  stds.push('cis');
+    if (document.getElementById('cf-soc2').checked) stds.push('soc2');
+    if (document.getElementById('cf-iso').checked)  stds.push('iso27001');
+
+    const body = {
+        name: 'policy-under-test',
+        enforcement_mode:         document.getElementById('cf-enforcement').value,
+        risk_level:               document.getElementById('cf-risk').value,
+        pod_security_standard:    document.getElementById('cf-pss').value,
+        target_environment:       document.getElementById('cf-env').value,
+        compliance_standards:     stds,
+        require_network_policies: document.getElementById('cf-network').checked,
+        require_resource_limits:  document.getElementById('cf-limits').checked,
+    };
+
+    try {
+        const res = await fetch(`${API_BASE}/demo/conflicts`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        renderConflictResult(data);
+    } catch (err) {
+        resultEl.innerHTML = `<p style="color:var(--danger)">Error: ${err.message}</p>`;
+    }
+});
+
+function renderConflictResult(data) {
+    const el = document.getElementById('conflict-result');
+    if (data.count === 0) {
+        el.innerHTML = `<div style="color:var(--success);font-weight:600;padding:12px 0">
+            No conflicts detected. Policy configuration is valid.</div>`;
+        return;
+    }
+
+    const sevColour = { HIGH: 'var(--danger)', MEDIUM: 'var(--warning)', LOW: 'var(--success)', CRITICAL: '#7c3aed' };
+    const rows = data.conflicts.map(c => `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+                <span style="background:${sevColour[c.severity]||'var(--text-muted)'};color:#fff;
+                    font-size:0.72rem;font-weight:700;padding:2px 8px;border-radius:4px">${c.severity}</span>
+                <span style="font-size:0.75rem;color:var(--text-muted);text-transform:uppercase">${c.type}</span>
+            </div>
+            <div style="font-weight:500;margin-bottom:4px">${c.description}</div>
+            <div style="font-size:0.85rem;color:var(--text-muted)">Fix: ${c.remediation}</div>
+        </div>`).join('');
+
+    el.innerHTML = `
+        <div style="font-weight:600;margin-bottom:12px;color:var(--danger)">
+            ${data.count} conflict${data.count > 1 ? 's' : ''} detected
+        </div>
+        ${rows}`;
+}
+
+// --- Health Score Scenarios ---
+async function loadHealthScenarios() {
+    const el = document.getElementById('health-scenarios-panel');
+    el.innerHTML = '<p class="empty-state">Loading…</p>';
+    try {
+        const res = await fetch(`${API_BASE}/demo/health-scenarios`);
+        const data = await res.json();
+        renderHealthScenarios(data);
+    } catch (err) {
+        el.innerHTML = `<p style="color:var(--danger)">Error: ${err.message}</p>`;
+    }
+}
+
+function renderHealthScenarios(scenarios) {
+    const el = document.getElementById('health-scenarios-panel');
+    const scoreBar = (score) => {
+        const colour = score >= 80 ? 'var(--success)' : score >= 50 ? 'var(--warning)' : 'var(--danger)';
+        return `<div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden">
+                <div style="height:100%;width:${score}%;background:${colour}"></div>
+            </div>
+            <span style="min-width:36px;text-align:right;font-weight:600;color:${colour}">${score}</span>
+        </div>`;
+    };
+
+    const rows = scenarios.map(s => `
+        <tr>
+            <td><strong>${s.name}</strong><br><span style="font-size:0.8rem;color:var(--text-muted)">${s.description}</span></td>
+            <td style="min-width:120px">${scoreBar(s.overall)}</td>
+            <td style="text-align:center;font-size:0.85rem">${s.scores.readiness}</td>
+            <td style="text-align:center;font-size:0.85rem">${s.scores.latency}</td>
+            <td style="text-align:center;font-size:0.85rem">${s.scores.signatures}</td>
+            <td style="text-align:center;font-size:0.85rem">${s.scores.errors}</td>
+            <td style="text-align:center;font-size:0.85rem">${s.scores.resources}</td>
+            <td style="text-align:center;font-size:0.85rem">${s.scores.queue}</td>
+        </tr>`).join('');
+
+    el.innerHTML = `
+        <table class="audit-table" style="width:100%">
+            <thead><tr>
+                <th>Scenario</th><th>Overall Score</th>
+                <th style="text-align:center" title="weight 25%">Readiness</th>
+                <th style="text-align:center" title="weight 25%">Latency</th>
+                <th style="text-align:center" title="weight 20%">Signatures</th>
+                <th style="text-align:center" title="weight 15%">Errors</th>
+                <th style="text-align:center" title="weight 10%">Resources</th>
+                <th style="text-align:center" title="weight 5%">Queue</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:8px">
+            Weights: Readiness 25%, Latency 25%, Signatures 20%, Errors 15%, Resources 10%, Queue 5%
+        </p>`;
+}
+
+// --- Traffic Switching Scenarios ---
+async function loadTrafficScenarios() {
+    const el = document.getElementById('traffic-scenarios-panel');
+    el.innerHTML = '<p class="empty-state">Loading…</p>';
+    try {
+        const res = await fetch(`${API_BASE}/demo/traffic-scenarios`);
+        const data = await res.json();
+        renderTrafficScenarios(data);
+    } catch (err) {
+        el.innerHTML = `<p style="color:var(--danger)">Error: ${err.message}</p>`;
+    }
+}
+
+function renderTrafficScenarios(scenarios) {
+    const el = document.getElementById('traffic-scenarios-panel');
+
+    const decisionStyle = (d) => {
+        if (['route', 'collapse_to_single', 'enter_spread'].includes(d))
+            return 'color:var(--success);font-weight:600';
+        if (d === 'force_spread')
+            return 'color:var(--danger);font-weight:600';
+        return 'color:var(--warning)';
+    };
+
+    const icapBar = (score) => {
+        const c = score >= 80 ? 'var(--success)' : score >= 70 ? 'var(--warning)' : 'var(--danger)';
+        return `<span style="font-weight:600;color:${c}">${score}</span>`;
+    };
+
+    const rows = scenarios.map(s => `
+        <tr>
+            <td><strong>${s.name}</strong><br>
+                <span style="font-size:0.8rem;color:var(--text-muted)">${s.description}</span></td>
+            <td style="text-align:center">${icapBar(s.inputs.icap_aggregate)}</td>
+            <td style="text-align:center;font-size:0.85rem">${s.inputs.traffic_growth}</td>
+            <td style="text-align:center;font-size:0.85rem">${s.inputs.current_mode}</td>
+            <td style="text-align:center">
+                <span style="${decisionStyle(s.result.decision)}">${s.result.decision.replace(/_/g,' ')}</span>
+            </td>
+            <td style="text-align:center;font-weight:600">${s.result.selected}</td>
+            <td style="font-size:0.8rem;color:var(--text-muted)">${s.result.reason}</td>
+        </tr>`).join('');
+
+    el.innerHTML = `
+        <table class="audit-table" style="width:100%">
+            <thead><tr>
+                <th>Scenario</th>
+                <th style="text-align:center">ICAP Health</th>
+                <th style="text-align:center">Traffic Growth</th>
+                <th style="text-align:center">Current Mode</th>
+                <th style="text-align:center">Decision</th>
+                <th style="text-align:center">Route To</th>
+                <th>Reason</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-top:8px">
+            Thresholds: spread entry 8% growth | spread exit 3% growth |
+            ICAP force-spread below 70 | min routing improvement 20% | cooldown 60s
+        </p>`;
+}
+
+// ---------------------------------------------------------------------------
+// Assistant (NLP chat)
+// ---------------------------------------------------------------------------
+
+let chatHistory = [];
+
+function handleChatKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+    }
+}
+
+async function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const msg   = input.value.trim();
+    if (!msg) return;
+
+    input.value = '';
+    appendChatMsg('user', msg);
+    chatHistory.push({ role: 'user', content: msg });
+
+    const sendBtn = document.getElementById('chat-send-btn');
+    sendBtn.disabled = true;
+    input.disabled   = true;
+
+    const thinkingId = appendChatMsg('assistant', '<span class="chat-thinking">Thinking...</span>');
+
+    try {
+        const res = await fetch(`${API_BASE}/nlp/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg, history: chatHistory.slice(-20) }),
+        });
+        const data = await res.json();
+
+        updateChatMsg(thinkingId, data.reply || '(no response)');
+        chatHistory.push({ role: 'assistant', content: data.reply || '' });
+
+        if (data.action) {
+            handleChatAction(data.action);
+        }
+    } catch (err) {
+        updateChatMsg(thinkingId, `Error: ${err.message}`);
+    } finally {
+        sendBtn.disabled = false;
+        input.disabled   = false;
+        input.focus();
+    }
+}
+
+function handleChatAction(action) {
+    if (action.type === 'switch_tab') {
+        switchTab(action.tab);
+        return;
+    }
+    if (action.type === 'fill_promotion_form') {
+        switchTab('dashboard');
+        const set = (id, val) => { if (val !== undefined && val !== '') { const el = document.getElementById(id); if (el) el.value = val; } };
+        set('name',          action.name);
+        set('app-name',      action.app_name);
+        set('source-env',    action.source_env);
+        set('target-env',    action.target_env);
+        set('version',       action.version);
+        set('app-namespace', action.namespace || '');
+    }
+}
+
+let _chatMsgCounter = 0;
+function appendChatMsg(role, html) {
+    const id  = `chat-msg-${++_chatMsgCounter}`;
+    const box = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = `chat-msg chat-msg-${role}`;
+    div.id        = id;
+    div.innerHTML = `<div class="chat-bubble">${formatChatContent(html)}</div>`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    return id;
+}
+
+function updateChatMsg(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.querySelector('.chat-bubble').innerHTML = formatChatContent(html);
+    const box = document.getElementById('chat-messages');
+    if (box) box.scrollTop = box.scrollHeight;
+}
+
+function formatChatContent(text) {
+    // Basic markdown: code blocks, inline code, bold, newlines
+    return text
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg-secondary);padding:8px 10px;border-radius:6px;font-size:0.82rem;margin:6px 0;white-space:pre-wrap">$1</pre>')
+        .replace(/`([^`]+)`/g, '<code style="background:var(--bg-secondary);padding:1px 5px;border-radius:3px;font-size:0.87em">$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n/g, '<br>');
+}
 
 loadData();

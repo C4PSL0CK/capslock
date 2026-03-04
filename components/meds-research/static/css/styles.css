@@ -604,3 +604,35 @@ input, select {
 .theme-toggle:hover {
     box-shadow: 0 4px 10px rgba(0,0,0,0.15);
 }
+
+/* Chat / Assistant tab */
+.chat-msg { display: flex; }
+.chat-msg-user      { justify-content: flex-end; }
+.chat-msg-assistant { justify-content: flex-start; }
+
+.chat-msg-user .chat-bubble {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 18px 18px 4px 18px;
+    padding: 10px 14px;
+    max-width: 75%;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.chat-msg-assistant .chat-bubble {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 18px 18px 18px 4px;
+    padding: 10px 14px;
+    max-width: 80%;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+.chat-thinking {
+    opacity: 0.5;
+    font-style: italic;
+}

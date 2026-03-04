@@ -3,6 +3,7 @@ import os
 import random
 import socket
 import re
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -20,6 +21,9 @@ ICAP_SERVICE_PORT = int(os.getenv("ICAP_SERVICE_PORT", "1344"))
 # Priority 2: policy-engine compliance gate
 POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
 
+# Cache TTL for scanning_mode (seconds) — avoids a round-trip on every scan
+_SCANNING_MODE_TTL = 60
+
 
 class ICAPScanResult(BaseModel):
     threat_found: bool
@@ -30,6 +34,10 @@ class ICAPScanResult(BaseModel):
 
 
 class ICAPScanner:
+    def __init__(self):
+        self._scanning_mode_cache: Optional[str] = None
+        self._scanning_mode_fetched_at: float = 0.0
+
     def scan(self, version: str, application_name: str) -> ICAPScanResult:
         # 1. Real ICAP protocol (available in Kubernetes with icap-operator deployed)
         if ICAP_SERVICE_HOST:
@@ -156,13 +164,19 @@ class ICAPScanner:
     # Layer 2 — Policy-engine compliance gate
     # -------------------------------------------------------------------------
     def _get_scanning_mode(self) -> str:
-        """Fetch the current scanning_mode from the policy-engine ICAP health endpoint."""
+        """Return scanning_mode, re-fetching from policy-engine at most once per TTL."""
+        now = time.monotonic()
+        if self._scanning_mode_cache is not None and (now - self._scanning_mode_fetched_at) < _SCANNING_MODE_TTL:
+            return self._scanning_mode_cache
         try:
             r = httpx.get(f"{POLICY_ENGINE_URL}/api/icap/health", timeout=3.0)
             r.raise_for_status()
-            return r.json().get("scanning_mode", "block")
+            mode = r.json().get("scanning_mode", "block")
         except Exception:
-            return "block"
+            mode = self._scanning_mode_cache or "block"
+        self._scanning_mode_cache = mode
+        self._scanning_mode_fetched_at = now
+        return mode
 
     def _policy_engine_scan(self, version: str, application_name: str) -> ICAPScanResult:
         """

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MEDS Dashboard</title>
+    <title>CAPSLOCK</title>
     <link rel="stylesheet" href="/static/css/styles.css">
 </head>
 <body>
@@ -11,7 +11,7 @@
 
     <div class="container">
         <header class="header">
-            <h1>MEDS Dashboard</h1>
+            <h1>CAPSLOCK</h1>
             <p>Multi-Environment Deployment System</p>
         </header>
 
@@ -39,6 +39,8 @@
             <button class="tab-btn" data-tab="icap" onclick="switchTab('icap')">ICAP Operator</button>
             <button class="tab-btn" data-tab="audit" onclick="switchTab('audit')">Audit Log</button>
             <button class="tab-btn" data-tab="versions" onclick="switchTab('versions')">Policy Versions</button>
+            <button class="tab-btn" data-tab="validation" onclick="switchTab('validation')">Validation</button>
+            <button class="tab-btn" data-tab="assistant" onclick="switchTab('assistant')">Assistant</button>
         </nav>
 
         <!-- Dashboard Tab -->
@@ -69,11 +71,11 @@
                         <input type="text" id="app-namespace" placeholder="Namespace (default)">
                     </div>
                     <div class="form-group">
-                        <label>Add Policies <span class="label-hint">— attach new policies to this deployment</span></label>
+                        <label>Add Policies <span class="label-hint">attach new policies to this deployment</span></label>
                         <div id="policy-selector"></div>
                     </div>
                     <div class="form-group">
-                        <label>Remove Policies <span class="label-hint">— detach policies currently active in the target environment</span></label>
+                        <label>Remove Policies <span class="label-hint">detach policies currently active in the target environment</span></label>
                         <div id="remove-policy-selector"><p class="empty-state" style="font-size:0.85rem;padding:8px 0">Select a target environment above to see removable policies.</p></div>
                     </div>
                     <button type="submit" class="btn btn-primary">Create Promotion</button>
@@ -119,13 +121,13 @@
                         <div class="form-group" style="flex:1">
                             <label>Scanning Mode</label>
                             <select id="icap-scanning-mode">
-                                <option value="log-only">log-only — scan and log, never block</option>
-                                <option value="warn">warn — scan and warn, never block</option>
-                                <option value="block" selected>block — scan and block threats</option>
+                                <option value="log-only">log-only: scan and log, never block</option>
+                                <option value="warn">warn: scan and warn, never block</option>
+                                <option value="block" selected>block: scan and block threats</option>
                             </select>
                         </div>
                         <div class="form-group" style="flex:1">
-                            <label>Replicas <span class="label-hint">— 1–10</span></label>
+                            <label>Replicas <span class="label-hint">1-10</span></label>
                             <input type="number" id="icap-replicas" min="1" max="10" placeholder="e.g. 3">
                         </div>
                     </div>
@@ -175,6 +177,183 @@
                     </select>
                 </div>
                 <div id="versions-table"></div>
+            </div>
+        </div>
+
+        <!-- Validation Tab -->
+        <div id="tab-validation" class="tab-panel hidden">
+
+            <!-- Top row: two interactive tools side by side -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+                <!-- 1. Risk Score Calculator -->
+                <div class="card" style="margin:0">
+                    <h2>Risk Score Calculator</h2>
+                    <form id="risk-score-form">
+                        <div class="form-group">
+                            <label>Version</label>
+                            <input type="text" id="rs-version" placeholder="e.g. v1.0-alpha" value="v1.2.3">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1">
+                                <label>Source Environment</label>
+                                <select id="rs-source-env">
+                                    <option value="development">development</option>
+                                    <option value="staging">staging</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Target Environment</label>
+                                <select id="rs-target-env">
+                                    <option value="staging">staging</option>
+                                    <option value="production">production</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1">
+                                <label>Policies to add</label>
+                                <input type="number" id="rs-add-policies" min="0" max="10" value="0">
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Policies to remove</label>
+                                <input type="number" id="rs-remove-policies" min="0" max="10" value="0">
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Max allowed score</label>
+                                <input type="number" id="rs-max-score" min="1" max="100" value="60">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width:100%">Calculate Risk Score</button>
+                    </form>
+                    <div id="risk-score-result" style="margin-top:16px"></div>
+                </div>
+
+                <!-- 2. Policy Conflict Detector -->
+                <div class="card" style="margin:0">
+                    <h2>Policy Conflict Detector</h2>
+                    <form id="conflict-form">
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1">
+                                <label>Enforcement Mode</label>
+                                <select id="cf-enforcement">
+                                    <option value="permissive">permissive</option>
+                                    <option value="audit">audit</option>
+                                    <option value="strict">strict</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Risk Level</label>
+                                <select id="cf-risk">
+                                    <option value="low">low</option>
+                                    <option value="medium">medium</option>
+                                    <option value="high">high</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1">
+                                <label>Pod Security Standard</label>
+                                <select id="cf-pss">
+                                    <option value="privileged">privileged</option>
+                                    <option value="baseline">baseline</option>
+                                    <option value="restricted">restricted</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1">
+                                <label>Target Environment</label>
+                                <select id="cf-env">
+                                    <option value="development">development</option>
+                                    <option value="staging">staging</option>
+                                    <option value="production">production</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Compliance Standards</label>
+                            <div style="display:flex;gap:20px;flex-wrap:wrap;padding:8px 0">
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+                                    <input type="checkbox" id="cf-pci"> PCI-DSS
+                                </label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+                                    <input type="checkbox" id="cf-cis"> CIS
+                                </label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+                                    <input type="checkbox" id="cf-soc2"> SOC2
+                                </label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+                                    <input type="checkbox" id="cf-iso"> ISO 27001
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Security Controls</label>
+                            <div style="display:flex;gap:24px;padding:8px 0">
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+                                    <input type="checkbox" id="cf-network"> Require network policies
+                                </label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+                                    <input type="checkbox" id="cf-limits" checked> Require resource limits
+                                </label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width:100%">Detect Conflicts</button>
+                    </form>
+                    <div id="conflict-result" style="margin-top:16px"></div>
+                </div>
+
+            </div>
+
+            <!-- 3. Health Score Scenarios -->
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>ICAP Health Score Scenarios</h2>
+                    <button class="btn btn-secondary btn-icon" onclick="loadHealthScenarios()">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+                <div id="health-scenarios-panel"><p class="empty-state">Loading health scenarios…</p></div>
+            </div>
+
+            <!-- 4. Traffic Switching Scenarios -->
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>Traffic Switching Scenarios</h2>
+                    <button class="btn btn-secondary btn-icon" onclick="loadTrafficScenarios()">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+                <div id="traffic-scenarios-panel"><p class="empty-state">Loading traffic scenarios…</p></div>
+            </div>
+
+        </div>
+
+        <!-- Assistant Tab -->
+        <div id="tab-assistant" class="tab-panel hidden">
+            <div class="card" style="display:flex;flex-direction:column;height:600px;padding:0;overflow:hidden">
+                <div class="card-header-row" style="padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
+                    <h2 style="margin:0">CAPSLOCK Assistant</h2>
+                    <span style="font-size:0.78rem;opacity:0.5">Groq llama-3.3-70b-versatile</span>
+                </div>
+                <div id="chat-messages" style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+                    <div class="chat-msg chat-msg-assistant">
+                        <div class="chat-bubble">Hi! I can answer questions about your promotions, explain risk scores, navigate the dashboard, or set up a new deployment for you. What would you like to do?</div>
+                    </div>
+                </div>
+                <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;align-items:flex-end">
+                    <textarea id="chat-input" rows="2" placeholder="Ask anything... (Enter to send, Shift+Enter for newline)"
+                        style="flex:1;resize:none;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-size:0.9rem;line-height:1.4"
+                        onkeydown="handleChatKey(event)"></textarea>
+                    <button class="btn btn-primary" onclick="sendChatMessage()" id="chat-send-btn" style="height:44px;padding:0 20px">Send</button>
+                </div>
             </div>
         </div>
 

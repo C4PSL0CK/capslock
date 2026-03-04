@@ -14,6 +14,12 @@ NC='\033[0m'
 
 PIDS=()
 
+# ── API keys ──────────────────────────────────────────────────────────────────
+# Load from .env if present (key is never committed to git)
+if [[ -f "$ROOT/.env" ]]; then
+    set -a; source "$ROOT/.env"; set +a
+fi
+
 # ── Kubernetes detection ──────────────────────────────────────────────────────
 # Use k3s kubeconfig if KUBECONFIG is not already set
 if [[ -z "${KUBECONFIG:-}" && -f /etc/rancher/k3s/k3s.yaml ]]; then
@@ -23,15 +29,15 @@ fi
 # Detect whether a K8s cluster is reachable
 K8S_AVAILABLE=false
 if [[ -n "${KUBECONFIG:-}" ]] && command -v kubectl &>/dev/null; then
-    kubectl get nodes &>/dev/null 2>&1 && K8S_AVAILABLE=true || true
+    kubectl get nodes --request-timeout=5s &>/dev/null 2>&1 && K8S_AVAILABLE=true || true
 elif command -v k3s &>/dev/null; then
-    k3s kubectl get nodes &>/dev/null 2>&1 && K8S_AVAILABLE=true || true
+    k3s kubectl get nodes --request-timeout=5s &>/dev/null 2>&1 && K8S_AVAILABLE=true || true
 fi
 
 if $K8S_AVAILABLE; then
-    echo -e "${GREEN}[k8s] Cluster reachable — icap-operator will be started${NC}"
+    echo -e "${GREEN}[k8s] Cluster reachable, icap-operator will be started${NC}"
 else
-    echo -e "${YELLOW}[k8s] No cluster detected — ICAP config stored locally (run sudo ./setup-k8s.sh to connect)${NC}"
+    echo -e "${YELLOW}[k8s] No cluster detected. ICAP config stored locally (run sudo ./setup-k8s.sh to connect)${NC}"
 fi
 
 cleanup() {
@@ -69,7 +75,7 @@ if $K8S_AVAILABLE && [[ -f "$OPERATOR_BIN" ]]; then
     PIDS+=($!)
     echo -e "${GREEN}      icap-operator running (PID ${PIDS[-1]})${NC}"
 elif $K8S_AVAILABLE && [[ ! -f "$OPERATOR_BIN" ]]; then
-    echo -e "${YELLOW}[2/5] Cluster found but operator not built — run: sudo ./setup-k8s.sh${NC}"
+    echo -e "${YELLOW}[2/5] Cluster found but operator not built. Run: sudo ./setup-k8s.sh${NC}"
 else
     echo -e "${YELLOW}[2/5] Skipping icap-operator (no cluster)${NC}"
 fi
@@ -124,7 +130,7 @@ echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║         CAPSLock is running                  ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}║  MEDS dashboard   →  http://localhost:8000   ║${NC}"
+echo -e "${GREEN}║  CAPSLOCK         →  http://localhost:8000   ║${NC}"
 echo -e "${GREEN}║  Policy Engine    →  http://localhost:8001   ║${NC}"
 echo -e "${GREEN}║  SSDLB controller →  http://localhost:8082   ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════╣${NC}"

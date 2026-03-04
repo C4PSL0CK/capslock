@@ -20,20 +20,32 @@ ICAP_GROUP       = "security.capslock.io"
 ICAP_VERSION     = "v1alpha1"
 ICAP_PLURAL      = "icapservices"
 
-# Try to load the Kubernetes client (available only when running in/near a cluster)
-try:
-    from kubernetes import client as _k8s_client, config as _k8s_config
+# Kubernetes client — imported lazily on first use to avoid startup overhead
+_k8s_client = None
+_k8s_config = None
+K8S_AVAILABLE: Optional[bool] = None  # None = not yet probed
+
+def _ensure_k8s() -> bool:
+    """Probe for a reachable K8s cluster once; cache the result."""
+    global _k8s_client, _k8s_config, K8S_AVAILABLE
+    if K8S_AVAILABLE is not None:
+        return K8S_AVAILABLE
     try:
-        _k8s_config.load_incluster_config()
-        K8S_AVAILABLE = True
-    except Exception:
+        from kubernetes import client as kc, config as kg
+        _k8s_client = kc
+        _k8s_config = kg
         try:
-            _k8s_config.load_kube_config()
+            kg.load_incluster_config()
             K8S_AVAILABLE = True
         except Exception:
-            K8S_AVAILABLE = False
-except ImportError:
-    K8S_AVAILABLE = False
+            try:
+                kg.load_kube_config()
+                K8S_AVAILABLE = True
+            except Exception:
+                K8S_AVAILABLE = False
+    except ImportError:
+        K8S_AVAILABLE = False
+    return K8S_AVAILABLE
 
 app = FastAPI(
     title="EAPE Policy Engine API",
@@ -455,7 +467,7 @@ def _get_icap_crd_status() -> Dict[str, Any]:
     Returns a structured dict identical in shape to the synthetic fallback
     so callers never need to branch on K8S_AVAILABLE.
     """
-    if not K8S_AVAILABLE:
+    if not _ensure_k8s():
         raise RuntimeError("Kubernetes API not reachable")
 
     crd_api = _k8s_client.CustomObjectsApi()
@@ -519,43 +531,47 @@ class IcapConfigureRequest(BaseModel):
 @app.post("/api/icap/operator/configure")
 async def configure_icap_operator(req: IcapConfigureRequest):
     """
-    Patch the ICAPService CRD spec so the icap-operator reconciles the change.
-    Accepted by MEDS when a promotion changes the security posture of an environment.
+    Save configuration locally (always) and also patch the ICAPService CRD if a
+    live K8s cluster is reachable.  The local state is the source of truth so
+    that changes are never lost even when no cluster is connected.
     """
-    if not K8S_AVAILABLE:
-        saved = _save_local_icap_state({
-            "scanning_mode": req.scanning_mode,
-            "replicas":      req.replicas,
-        })
-        return {
-            "status": "applied_local",
-            "message": "Configuration saved locally — will be applied to K8s when a cluster is connected",
-            "patch": {k: v for k, v in {"scanning_mode": req.scanning_mode, "replicas": req.replicas}.items() if v is not None},
-            "current_state": saved,
-        }
+    # Always persist locally first so status reads reflect the new value immediately
+    saved = _save_local_icap_state({
+        "scanning_mode": req.scanning_mode,
+        "replicas":      req.replicas,
+    })
+    applied_patch = {k: v for k, v in {"scanning_mode": req.scanning_mode, "replicas": req.replicas}.items() if v is not None}
 
-    patch: Dict[str, Any] = {"spec": {}}
-    if req.scanning_mode:
-        patch["spec"]["icapConfig"] = {"scanningMode": req.scanning_mode}
-    if req.replicas is not None:
-        patch["spec"]["replicas"] = req.replicas
+    if not applied_patch:
+        raise HTTPException(status_code=400, detail="No fields to update")
 
-    if not patch["spec"]:
-        raise HTTPException(status_code=400, detail="No fields to patch")
+    # Best-effort: also apply to K8s CRD if a cluster is reachable
+    if _ensure_k8s():
+        k8s_patch: Dict[str, Any] = {"spec": {}}
+        if req.scanning_mode:
+            k8s_patch["spec"]["icapConfig"] = {"scanningMode": req.scanning_mode}
+        if req.replicas is not None:
+            k8s_patch["spec"]["replicas"] = req.replicas
+        try:
+            crd_api = _k8s_client.CustomObjectsApi()  # type: ignore[union-attr]
+            crd_api.patch_namespaced_custom_object(
+                group=ICAP_GROUP,
+                version=ICAP_VERSION,
+                namespace=ICAP_NAMESPACE,
+                plural=ICAP_PLURAL,
+                name=ICAP_SERVICE_NAME,
+                body=k8s_patch,
+            )
+            return {"status": "patched", "patch": applied_patch, "current_state": saved}
+        except Exception:
+            pass  # cluster unreachable — local save is sufficient
 
-    try:
-        crd_api = _k8s_client.CustomObjectsApi()
-        crd_api.patch_namespaced_custom_object(
-            group=ICAP_GROUP,
-            version=ICAP_VERSION,
-            namespace=ICAP_NAMESPACE,
-            plural=ICAP_PLURAL,
-            name=ICAP_SERVICE_NAME,
-            body=patch,
-        )
-        return {"status": "patched", "patch": patch["spec"]}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    return {
+        "status": "applied_local",
+        "message": "Configuration saved. Will sync to K8s when a cluster is connected.",
+        "patch": applied_patch,
+        "current_state": saved,
+    }
 
 
 @app.get("/api/icap/health")
