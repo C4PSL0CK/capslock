@@ -42,7 +42,10 @@ UVICORN="$VENV/bin/uvicorn"
 # ── 2. Start SSDLB (port 8082) ───────────────────────────────────────────────
 echo -e "${BLUE}[2/4] Starting SSDLB controller...${NC}"
 cd "$ROOT/components/ssdlb/controller"
-"$UVICORN" main:app --host 0.0.0.0 --port 8082 --log-level warning \
+POLICY_ENGINE_URL=http://localhost:8001 \
+ICAP_HEALTH_SPREAD_THRESHOLD=70 \
+ICAP_INSTANCE_HEALTHY_FLOOR=60 \
+    "$UVICORN" main:app --host 0.0.0.0 --port 8082 --log-level warning \
     > /tmp/capslock-ssdlb.log 2>&1 &
 PIDS+=($!)
 
@@ -55,6 +58,8 @@ done
 echo -e "${BLUE}[3/4] Starting Policy Engine...${NC}"
 cd "$ROOT/components/policy-engine"
 SSDLB_URL=http://localhost:8082 \
+ICAP_NAMESPACE=capslock-system \
+ICAP_SERVICE_NAME=capslock-icap \
     "$UVICORN" api.main:app --host 0.0.0.0 --port 8001 --log-level warning \
     > /tmp/capslock-policy-engine.log 2>&1 &
 PIDS+=($!)
@@ -68,6 +73,8 @@ done
 echo -e "${BLUE}[4/4] Starting MEDS...${NC}"
 cd "$ROOT/components/meds-research"
 POLICY_ENGINE_URL=http://localhost:8001 \
+ICAP_SERVICE_HOST="" \
+ICAP_SERVICE_PORT=1344 \
     "$UVICORN" meds.api.main:app --host 0.0.0.0 --port 8000 --log-level warning \
     > /tmp/capslock-meds.log 2>&1 &
 PIDS+=($!)

@@ -27,8 +27,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Point ICAP scanner at the live policy-engine
+      # Point ICAP scanner at the live policy-engine (layer 2 fallback)
       POLICY_ENGINE_URL: "http://policy-engine:8001"
+      # Set ICAP_SERVICE_HOST to the real ICAP service host when running in K8s:
+      #   ICAP_SERVICE_HOST: "capslock-icap-service.capslock-system.svc.cluster.local"
+      ICAP_SERVICE_HOST: ""
+      ICAP_SERVICE_PORT: "1344"
       PYTHONUNBUFFERED: "1"
     depends_on:
       policy-engine:
@@ -58,6 +62,9 @@ services:
     environment:
       # Allow policy-engine to query SSDLB for live traffic state
       SSDLB_URL: "http://ssdlb:8082"
+      # ICAP operator CRD coordinates (for K8s mode; no effect locally)
+      ICAP_NAMESPACE: "capslock-system"
+      ICAP_SERVICE_NAME: "capslock-icap"
       PYTHONUNBUFFERED: "1"
     depends_on:
       ssdlb:
@@ -86,6 +93,10 @@ services:
       - "8082:8082"
     environment:
       PROMETHEUS_URL: "http://prometheus:9090"
+      POLICY_ENGINE_URL: "http://policy-engine:8001"
+      # ICAP health thresholds
+      ICAP_HEALTH_SPREAD_THRESHOLD: "70"
+      ICAP_INSTANCE_HEALTHY_FLOOR: "60"
       # Guardrail tuning (optional overrides)
       COOLDOWN_SECONDS: "60"
       MIN_CHANGE_RATIO: "0.20"

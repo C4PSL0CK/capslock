@@ -31,7 +31,15 @@ def log_event(event: str, **fields):
     # Ensure it's always JSON even if some fields are non-serializable
     logger.info(json.dumps(payload, default=str))
 
-PROMETHEUS_URL = os.getenv("PROMETHEUS_URL", "http://localhost:9090")
+PROMETHEUS_URL    = os.getenv("PROMETHEUS_URL",    "http://localhost:9090")
+POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
+
+# Below this aggregate health score the SSDLB forces spread mode regardless
+# of traffic trend, because at least one ICAP instance is degraded.
+ICAP_HEALTH_SPREAD_THRESHOLD = int(os.getenv("ICAP_HEALTH_SPREAD_THRESHOLD", "70"))
+# Per-instance health penalty multiplier: if a version's health is below this,
+# its observed rate is artificially inflated so it won't be chosen for single mode.
+ICAP_INSTANCE_HEALTHY_FLOOR = int(os.getenv("ICAP_INSTANCE_HEALTHY_FLOOR", "60"))
 
 # Guardrails (tune later)
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "60"))
@@ -134,6 +142,29 @@ def set_version(version: str):
     return {"status": "ok", "applied": path}
 
 
+def get_icap_health() -> dict:
+    """
+    Fetch ICAP operator health from the policy-engine bridge endpoint.
+    Returns an empty dict when the policy-engine is unreachable so callers
+    can safely treat missing data as "all healthy".
+    """
+    if not POLICY_ENGINE_URL:
+        return {}
+    try:
+        r = requests.get(f"{POLICY_ENGINE_URL}/api/icap/health", timeout=3)
+        r.raise_for_status()
+        return r.json()
+    except Exception as exc:
+        log_event("icap_health_fetch_failed", error=str(exc))
+        return {}
+
+
+@app.get("/icap-health")
+def icap_health_endpoint():
+    """Expose the current ICAP operator health for the MEDS dashboard."""
+    return get_icap_health()
+
+
 def query_prometheus(query: str):
     r = requests.get(
         f"{PROMETHEUS_URL}/api/v1/query",
@@ -145,6 +176,7 @@ def query_prometheus(query: str):
 
 
 def get_request_rates():
+    """Raw Istio request rates per ICAP version (a/b/c)."""
     query = (
         'rate(istio_requests_total{'
         'destination_service="icap-service.default.svc.cluster.local",'
@@ -162,6 +194,41 @@ def get_request_rates():
             rates[version] = rates.get(version, 0) + value
 
     return rates
+
+
+def get_health_weighted_rates() -> dict:
+    """
+    Returns per-version request rates adjusted by ICAP operator health scores.
+
+    Versions whose instance health score falls below ICAP_INSTANCE_HEALTHY_FLOOR
+    have their effective rate inflated (making them look busy) so the SSDLB
+    avoids routing all traffic there in single mode.
+    """
+    rates  = get_request_rates()
+    health = get_icap_health()
+    instances = health.get("instances", {})
+
+    if not instances:
+        return rates  # no health data → use raw rates unchanged
+
+    weighted = {}
+    for ver, rate in rates.items():
+        score = instances.get(ver, {}).get("health_score", 100)
+        if score < ICAP_INSTANCE_HEALTHY_FLOOR:
+            # Penalise: treat the version as if it is 3× as loaded
+            penalty = 3.0 * (ICAP_INSTANCE_HEALTHY_FLOOR - score) / ICAP_INSTANCE_HEALTHY_FLOOR
+            weighted[ver] = rate * (1.0 + penalty)
+            log_event(
+                "icap_health_penalty_applied",
+                version=ver,
+                health_score=score,
+                raw_rate=rate,
+                effective_rate=weighted[ver],
+            )
+        else:
+            weighted[ver] = rate
+
+    return weighted
 
 
 def get_total_rate(window: str):
@@ -275,9 +342,34 @@ def auto_route():
             "seconds_remaining": remaining
         }
 
-    # Query rates
+    # Check ICAP operator health — force spread if aggregate score is degraded
+    icap_health = get_icap_health()
+    agg_score   = icap_health.get("aggregate_health_score", 100)
+    if icap_health and agg_score < ICAP_HEALTH_SPREAD_THRESHOLD and state.get("mode") != "spread":
+        result = subprocess.run(
+            ["kubectl", "apply", "-f", os.path.join(DR_DIR, "dr-spread.yaml")],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            state["mode"]           = "spread"
+            state["last_selected"]  = "spread"
+            state["last_switch_ts"] = now
+            state["spread_since_ts"] = now
+            save_state(state)
+            log_event(
+                "icap_health_forced_spread",
+                aggregate_health_score=agg_score,
+                threshold=ICAP_HEALTH_SPREAD_THRESHOLD,
+            )
+            return {
+                "status":                  "icap-health-spread",
+                "aggregate_health_score":  agg_score,
+                "threshold":               ICAP_HEALTH_SPREAD_THRESHOLD,
+            }
+
+    # Query health-weighted rates
     try:
-        rates = get_request_rates()
+        rates = get_health_weighted_rates()
     except Exception as e:
         return {"status": "no-metrics", "reason": str(e)}
 
@@ -334,11 +426,11 @@ def auto_route():
                 "medium_rate": medium_rate
             }
 
-        # Collapse back to single
+        # Collapse back to single — pick the healthiest (lowest effective load) version
         if not rates:
             return {"status": "no-metrics", "reason": "empty rates"}
 
-        selected = min(rates, key=rates.get)
+        selected = min(rates, key=rates.get)  # lowest effective rate = least loaded + healthiest
         result = apply_version(selected)
 
         if result.returncode != 0:

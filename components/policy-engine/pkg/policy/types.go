@@ -7,6 +7,38 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Environment represents a deployment environment tier
+type Environment string
+
+const (
+	EnvironmentDev     Environment = "dev"
+	EnvironmentStaging Environment = "staging"
+	EnvironmentProd    Environment = "prod"
+)
+
+// IcapConfiguration defines ICAP-specific content scanning settings
+// applied to the ICAPService CRD managed by the icap-operator
+type IcapConfiguration struct {
+	// ScanningMode controls how threats are handled: log-only, warn, or block
+	ScanningMode string `yaml:"scanning_mode" json:"scanning_mode"`
+	// MaxFileSize limits the size of artifacts submitted for scanning (e.g. "50MB")
+	MaxFileSize string `yaml:"max_file_size" json:"max_file_size"`
+	// EnableAVSignatureUpdates enables automatic ClamAV signature refresh
+	EnableAVSignatureUpdates bool `yaml:"enable_av_signature_updates" json:"enable_av_signature_updates"`
+	// SignatureUpdateInterval how often to refresh signatures (e.g. "1h")
+	SignatureUpdateInterval string `yaml:"signature_update_interval" json:"signature_update_interval"`
+}
+
+// PerformanceConfig defines scan throughput and reliability settings
+type PerformanceConfig struct {
+	// MaxConcurrentScans is the maximum number of parallel ICAP scans
+	MaxConcurrentScans int `yaml:"max_concurrent_scans" json:"max_concurrent_scans"`
+	// ScanTimeoutSeconds is the per-scan deadline
+	ScanTimeoutSeconds int `yaml:"scan_timeout_seconds" json:"scan_timeout_seconds"`
+	// QueueSizeLimit is the maximum pending scan queue depth
+	QueueSizeLimit int `yaml:"queue_size_limit" json:"queue_size_limit"`
+}
+
 // PolicyTemplate represents a complete policy template
 type PolicyTemplate struct {
 	// Metadata
@@ -14,7 +46,10 @@ type PolicyTemplate struct {
 	Description string `yaml:"description" json:"description"`
 	Version     string `yaml:"version" json:"version"`
 
-	// Target environment
+	// Typed environment (dev / staging / prod)
+	Environment Environment `yaml:"environment" json:"environment"`
+
+	// Target environment (legacy string field kept for YAML back-compat)
 	TargetEnvironment string `yaml:"target_environment" json:"target_environment"`
 
 	// Risk level
@@ -40,6 +75,12 @@ type PolicyTemplate struct {
 
 	// Compliance configuration
 	Compliance ComplianceConfig `yaml:"compliance" json:"compliance"`
+
+	// ICAP content-scanning configuration applied to the icap-operator ICAPService CRD
+	IcapConfig IcapConfiguration `yaml:"icap_config" json:"icap_config"`
+
+	// Performance tuning for ICAP scan throughput
+	Performance PerformanceConfig `yaml:"performance" json:"performance"`
 }
 
 // EnforcementConfig defines how the policy should be enforced
