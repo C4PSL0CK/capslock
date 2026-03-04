@@ -1,3 +1,7 @@
+import asyncio
+import os
+
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -5,6 +9,9 @@ from typing import List, Optional, Dict, Any
 import subprocess
 import json
 from datetime import datetime
+
+# URL of the SSDLB controller (set via env var)
+SSDLB_URL = os.getenv("SSDLB_URL", "").rstrip("/")
 
 app = FastAPI(
     title="EAPE Policy Engine API",
@@ -289,9 +296,9 @@ async def get_policy_for_icap(namespace: str):
             text=True,
             check=False
         )
-        
+
         compliance_report = json.loads(result.stdout)
-        
+
         return {
             "namespace": namespace,
             "policy_approved": compliance_report["overall_compliant"],
@@ -302,12 +309,41 @@ async def get_policy_for_icap(namespace: str):
                 "pci_dss": compliance_report.get("pci_dss", {}).get("score", 0.0)
             }
         }
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get policy status: {str(e)}"
         )
+
+
+@app.get("/api/integration/ssdlb/status")
+async def get_ssdlb_status():
+    """
+    Get current SSDLB load-balancer state and traffic trend.
+    Called by MEDS dashboard or policy workflows to check ICAP service health.
+    """
+    if not SSDLB_URL:
+        return {"status": "not_configured", "message": "SSDLB_URL env var not set"}
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            state_resp, trend_resp = await asyncio.gather(
+                client.get(f"{SSDLB_URL}/state"),
+                client.get(f"{SSDLB_URL}/trend-debug"),
+                return_exceptions=True,
+            )
+
+        state = state_resp.json() if not isinstance(state_resp, Exception) else {}
+        trend = trend_resp.json() if not isinstance(trend_resp, Exception) else {}
+
+        return {
+            "status": "ok",
+            "lb_state": state,
+            "traffic_trend": trend,
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 # ============================================================================
 # Utility Endpoints

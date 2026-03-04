@@ -2,6 +2,7 @@ const API_BASE = `http://${window.location.hostname}:${window.location.port}/api
 
 let policies = [];
 let promotions = [];
+let environments = {};   // keyed by env name → { policies: [...], max_risk_score: N }
 let currentTab = 'dashboard';
 let auditRefreshTimer = null;
 
@@ -27,22 +28,60 @@ const EVENT_META = {
 // --- Core data loading ---
 async function loadData() {
     try {
-        const [policiesRes, promotionsRes, analyticsRes] = await Promise.all([
+        const [policiesRes, promotionsRes, analyticsRes, envsRes] = await Promise.all([
             fetch(`${API_BASE}/policies`),
             fetch(`${API_BASE}/promotions`),
             fetch(`${API_BASE}/analytics`),
+            fetch(`${API_BASE}/environments`),
         ]);
 
         policies = await policiesRes.json();
         promotions = await promotionsRes.json();
         const analytics = await analyticsRes.json();
+        const envsData = await envsRes.json();
+
+        // Index environments by name for fast lookup
+        environments = {};
+        (Array.isArray(envsData) ? envsData : Object.values(envsData)).forEach(env => {
+            environments[env.name] = env;
+        });
 
         renderPolicies();
         renderPromotions();
         updateStats(analytics);
+
+        // Refresh remove-policies list if a target is already selected
+        const targetEnv = document.getElementById('target-env').value;
+        if (targetEnv) renderRemovePolicies(targetEnv);
     } catch (error) {
         console.error('Failed to load data:', error);
     }
+}
+
+// --- Remove-policies panel ---
+function renderRemovePolicies(targetEnv) {
+    const container = document.getElementById('remove-policy-selector');
+    if (!targetEnv) {
+        container.innerHTML = '<p class="empty-state" style="font-size:0.85rem;padding:8px 0">Select a target environment above to see removable policies.</p>';
+        return;
+    }
+
+    const env = environments[targetEnv];
+    const activePolicies = env ? (env.policies || []) : [];
+
+    if (activePolicies.length === 0) {
+        container.innerHTML = '<p class="empty-state" style="font-size:0.85rem;padding:8px 0">No active policies in this environment.</p>';
+        return;
+    }
+
+    container.innerHTML = activePolicies.map(name => `
+        <div class="policy-item">
+            <label>
+                <input type="checkbox" name="remove-policy" value="${name}">
+                <span><strong>${name}</strong></span>
+            </label>
+        </div>
+    `).join('');
 }
 
 function renderPolicies() {
@@ -83,6 +122,11 @@ function updateStats(analytics) {
     document.getElementById('avg-risk').textContent = analytics.average_risk_score;
 }
 
+// Update remove-policies list when target environment changes
+document.getElementById('target-env').addEventListener('change', (e) => {
+    renderRemovePolicies(e.target.value);
+});
+
 // --- Promotion form submit ---
 document.getElementById('promotion-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -90,13 +134,20 @@ document.getElementById('promotion-form').addEventListener('submit', async (e) =
     const selectedPolicies = Array.from(document.querySelectorAll('input[name="policy"]:checked'))
         .map(cb => cb.value);
 
+    const removePolicies = Array.from(document.querySelectorAll('input[name="remove-policy"]:checked'))
+        .map(cb => cb.value);
+
+    const namespace = document.getElementById('app-namespace').value.trim() || 'default';
+
     const data = {
         name: document.getElementById('name').value,
         application_name: document.getElementById('app-name').value,
         source_environment: document.getElementById('source-env').value,
         target_environment: document.getElementById('target-env').value,
         version: document.getElementById('version').value,
+        application_namespace: namespace,
         add_policies: selectedPolicies,
+        remove_policies: removePolicies,
     };
 
     try {

@@ -1,4 +1,7 @@
+import os
 from typing import Dict, Any, Optional
+
+import httpx
 
 from meds.models.promotion import Promotion, Environment
 from meds.validation.risk_scorer import RiskScorer
@@ -7,6 +10,8 @@ from meds.icap.scanner import ICAPScanner
 from meds.audit.log import AuditLogger
 from meds.policy.version_store import PolicyVersionStore
 from meds.utils.logger import get_logger
+
+POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
 
 
 class PromotionController:
@@ -110,6 +115,12 @@ class PromotionController:
                 promotion_id=promotion_id,
                 environment=target_env.name,
             )
+            self._notify_policy_engine(
+                namespace=promotion.spec.application.namespace,
+                environment=target_env.name,
+                promotion_id=promotion_id,
+                version=version,
+            )
         else:
             self.audit_logger.log(
                 "promotion_rejected",
@@ -133,3 +144,33 @@ class PromotionController:
             "message": message,
             "icap_scan": icap_result.model_dump(),
         }
+
+    def _notify_policy_engine(
+        self, namespace: str, environment: str, promotion_id: str, version: str
+    ) -> None:
+        """Fire-and-forget notification to the policy-engine after a promotion is approved."""
+        if not POLICY_ENGINE_URL:
+            return
+        try:
+            httpx.post(
+                f"{POLICY_ENGINE_URL}/api/integration/meds/notify",
+                json={
+                    "namespace": namespace,
+                    "environment": environment,
+                    "promotion_id": promotion_id,
+                    "version": version,
+                },
+                timeout=5.0,
+            )
+            self.logger.info(
+                "policy_engine_notified",
+                namespace=namespace,
+                environment=environment,
+                promotion_id=promotion_id,
+            )
+        except Exception as e:
+            self.logger.warning(
+                "policy_engine_notify_failed",
+                error=str(e),
+                namespace=namespace,
+            )

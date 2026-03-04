@@ -65,10 +65,15 @@
                     </div>
                     <div class="form-row">
                         <input type="text" id="version" placeholder="Version (e.g., v1.2.3)" required>
+                        <input type="text" id="app-namespace" placeholder="Namespace (default)">
                     </div>
                     <div class="form-group">
-                        <label>Add Policies:</label>
+                        <label>Add Policies <span class="label-hint">— attach new policies to this deployment</span></label>
                         <div id="policy-selector"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Remove Policies <span class="label-hint">— detach policies currently active in the target environment</span></label>
+                        <div id="remove-policy-selector"><p class="empty-state" style="font-size:0.85rem;padding:8px 0">Select a target environment above to see removable policies.</p></div>
                     </div>
                     <button type="submit" class="btn btn-primary">Create Promotion</button>
                 </form>

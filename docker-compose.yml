@@ -1,0 +1,126 @@
+version: "3.9"
+
+# CAPSLock – local development stack
+# Connects all 4 components:
+#   meds          → Multi-Environment Deployment System          :8000
+#   policy-engine → Environment-Aware Policy Engine (Python API) :8001
+#   ssdlb         → Service Discovery & Load Balancing           :8082
+#   prometheus    → Metrics backend used by ssdlb                :9090
+#
+# The icap-operator is a Kubernetes controller and cannot run standalone;
+# use `make deploy` inside components/icap-operator to deploy it to a cluster.
+
+networks:
+  capslock:
+    driver: bridge
+
+services:
+
+  # ──────────────────────────────────────────────
+  # 1. MEDS – Multi-Environment Deployment System
+  # ──────────────────────────────────────────────
+  meds:
+    build:
+      context: ./components/meds-research
+    image: capslock/meds:dev
+    container_name: capslock-meds
+    ports:
+      - "8000:8000"
+    environment:
+      # Point ICAP scanner at the live policy-engine
+      POLICY_ENGINE_URL: "http://policy-engine:8001"
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      policy-engine:
+        condition: service_healthy
+    networks:
+      - capslock
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/environments')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+
+  # ──────────────────────────────────────────────────────────────
+  # 2. Policy Engine – Environment-Aware Policy Engine (Python API)
+  # ──────────────────────────────────────────────────────────────
+  policy-engine:
+    build:
+      context: ./components/policy-engine
+      dockerfile: Dockerfile
+    image: capslock/policy-engine:dev
+    container_name: capslock-policy-engine
+    ports:
+      - "8001:8000"
+    environment:
+      # Allow policy-engine to query SSDLB for live traffic state
+      SSDLB_URL: "http://ssdlb:8082"
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      ssdlb:
+        condition: service_healthy
+    networks:
+      - capslock
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  # ──────────────────────────────────────────────────────────────
+  # 3. SSDLB – Service Discovery & Load Balancing Controller
+  # ──────────────────────────────────────────────────────────────
+  ssdlb:
+    build:
+      context: ./components/ssdlb/controller
+      dockerfile: Dockerfile
+    image: capslock/ssdlb:dev
+    container_name: capslock-ssdlb
+    ports:
+      - "8082:8082"
+    environment:
+      PROMETHEUS_URL: "http://prometheus:9090"
+      # Guardrail tuning (optional overrides)
+      COOLDOWN_SECONDS: "60"
+      MIN_CHANGE_RATIO: "0.20"
+      SPREAD_MIN_SECONDS: "60"
+      RECOVERY_STABLE_SECONDS: "120"
+      LOG_LEVEL: "INFO"
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      - prometheus
+    networks:
+      - capslock
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8082/')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+  # ──────────────────────────────────────────────────────────────
+  # Prometheus – metrics backend for SSDLB traffic decisions
+  # ──────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: capslock-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - capslock
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"

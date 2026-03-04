@@ -1,3 +1,10 @@
+# CAPSLock ArgoCD Application set
+# Apply once: kubectl apply -f manifests/argocd-apps/argocd.yaml
+# ArgoCD then keeps all components in sync with the git repo.
+
+# ──────────────────────────────────────────────────────────────
+# App-of-apps: drives the four per-component Applications below
+# ──────────────────────────────────────────────────────────────
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -13,14 +20,126 @@ spec:
     path: gitops/apps
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: capslock-system
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+
 ---
+# ──────────────────────────────────────────────────────────────
+# Component 1 – ICAP Operator
+# ──────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: capslock-icap-operator
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/C4PSL0CK/capslock.git
+    targetRevision: HEAD
+    path: gitops/apps/icap-operator/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: capslock-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# ──────────────────────────────────────────────────────────────
+# Component 2 – Policy Engine (EAPE)
+# ──────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: capslock-policy-engine
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/C4PSL0CK/capslock.git
+    targetRevision: HEAD
+    path: gitops/apps/policy-engine/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: capslock-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# ──────────────────────────────────────────────────────────────
+# Component 3 – SSDLB Controller
+# ──────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: capslock-ssdlb
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/C4PSL0CK/capslock.git
+    targetRevision: HEAD
+    path: gitops/apps/ssdlb/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: capslock-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# ──────────────────────────────────────────────────────────────
+# Component 4 – MEDS
+# ──────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: capslock-meds
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/C4PSL0CK/capslock.git
+    targetRevision: HEAD
+    path: gitops/apps/meds/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: capslock-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# ──────────────────────────────────────────────────────────────
+# Policies – syncs gitops/policies to capslock-system
+# ──────────────────────────────────────────────────────────────
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

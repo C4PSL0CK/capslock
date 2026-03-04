@@ -6,6 +6,10 @@ __pycache__/
 venv/
 env/
 .env/
+.venv/
+
+# Runtime data
+components/meds-research/data/
 
 # Runtime state
 state.json

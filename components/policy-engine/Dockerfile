@@ -14,7 +14,7 @@ COPY cmd/ ./cmd/
 COPY pkg/ ./pkg/
 
 # Build the CLI binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o policy-engine ./cmd/policy-engine
+RUN CGO_ENABLED=0 GOOS=linux go build -o policy-engine ./cmd/test-detector
 
 # Stage 2: Python API
 FROM python:3.11-slim
@@ -43,7 +43,7 @@ ENV PATH="/app/bin:${PATH}"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:8000/')"
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"
 
 # Run the FastAPI server
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
