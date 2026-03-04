@@ -1,72 +1,112 @@
-# CapsLock Project
+# CAPSLOCK
+
+**CAPSLock Security Platform** — cloud-native ICAP content inspection with intelligent deployment management, policy enforcement, and AI-assisted operations.
+
+**Project ID:** 25-26J-043
 
 ## Overview
 
-CapsLock is a comprehensive ICAP (Internet Content Adaptation Protocol) security platform designed for enterprise-grade content inspection and malware detection. The project implements a cloud-native, microservices-based architecture with advanced policy management, service discovery, and load balancing capabilities.
+CAPSLOCK is a microservices system that secures Kubernetes deployments through a pipeline of content scanning (ICAP), risk-based policy enforcement, adaptive load balancing, and a unified management dashboard. Every software promotion passes through threat detection and risk scoring before reaching production.
 
-## Project Structure
+## Architecture
 
-```text
-capslock/
-├── docs/                     # Project documentation
-├── manifests/               # Kubernetes manifests and CRDs
-├── gitops/                  # GitOps configurations (Kustomize)
-├── components/              # Microservice components
-│   ├── meds/               # Malware and Endpoint Detection Service
-│   ├── policy-engine/      # Policy management and enforcement
-│   ├── ssdlb/              # Service Discovery & Load Balancing
-│   └── icap-operator/      # Kubernetes operator for ICAP services
-├── infrastructure/          # Infrastructure as Code
-├── cicd/                   # CI/CD pipelines and automation
-└── scripts/                # Utility scripts
+```
+Developer → CAPSLOCK Dashboard (MEDS)
+               ↓
+         Risk Scorer + ICAP Scanner
+               ↓
+         Policy Engine (Go)  ←→  Kubernetes CRDs
+               ↓
+         SSDLB (traffic routing)
+               ↓
+         ICAP Operator (ClamAV scanning)
 ```
 
 ## Components
 
-### MEDS (Malware and Endpoint Detection Service)
+| Component | Language | Role |
+|-----------|----------|------|
+| [MEDS](components/meds-research/) | Python / FastAPI | Deployment dashboard, risk scoring, NLP assistant |
+| [Policy Engine](components/policy-engine/) | Go + Python bridge | Policy conflict resolution, ICAP operator bridge, K8s CRD management |
+| [SSDLB](components/ssdlb/) | Go | Adaptive traffic routing, ICAP-health-weighted load balancing |
+| [ICAP Operator](components/icap-operator/) | Go / Kubebuilder | Kubernetes operator managing ClamAV ICAP service lifecycle |
 
-Core security component responsible for malware detection and content inspection using advanced scanning engines.
+## Quick Start
 
-### Policy Engine
+```bash
+# 1. Add your Groq API key (free at console.groq.com)
+echo "GROQ_API_KEY=gsk_..." > .env
 
-Manages security policies, validation rules, and conflict resolution across the ICAP infrastructure.
+# 2. Start everything
+bash start.sh
+```
 
-### SSDLB (Service Discovery & Load Balancing)
+`start.sh` auto-detects k3s/minikube, sources `.env` for secrets, and starts all services.
 
-Provides intelligent service discovery and load balancing for optimal traffic distribution.
+Dashboard: **http://localhost:8000**
 
-### ICAP Operator
+## Dashboard Tabs
 
-Kubernetes operator that manages the lifecycle of ICAP services and their configurations.
+| Tab | Purpose |
+|-----|---------|
+| Dashboard | Create promotions, view recent deployments |
+| ICAP Operator | Monitor health, configure scanning mode and replicas |
+| Audit Log | Full event history with filtering |
+| Policy Versions | Version history and rollback per environment |
+| Validation | Interactive risk calculator, conflict detector, health scenarios, traffic demos |
+| Assistant | NLP chat powered by Groq llama-3.3-70b |
 
-## Development Environment
+## Environment Risk Thresholds
 
-The project supports multiple development environments:
+| Environment | Max Risk Score | Pipeline Position |
+|-------------|---------------|-------------------|
+| Development | 80 | Entry point |
+| Staging | 60 | Pre-production gate |
+| Production | 40 | Strictest gate |
 
-- **Minikube**: Local Kubernetes development
-- **KIND**: Kubernetes in Docker for testing
-- **Istio**: Service mesh for production-ready deployments
+## Risk Score Factors
 
-## Getting Started
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| Configuration complexity | 30% | Version maturity (alpha/beta/rc/stable) |
+| Policy changes | 40% | Number of policies added or removed |
+| Version delta | 20% | Semantic version distance |
+| Environment transition | 10% | Risk of the source→target hop |
 
-1. Clone the repository
-2. Set up your development environment using scripts in `scripts/setup/`
-3. Deploy infrastructure components from `infrastructure/`
-4. Use GitOps workflows from `gitops/` for application deployment
+## Repository Structure
 
-## Documentation
+```
+capslock/
+├── components/
+│   ├── meds-research/        # MEDS dashboard + API
+│   ├── policy-engine/        # Go policy engine + Python bridge
+│   ├── ssdlb/                # Traffic routing service
+│   └── icap-operator/        # Kubernetes operator
+├── scripts/
+│   └── demo_traffic_switching.py  # SSDLB scenario demo
+├── manifests/                # Kubernetes manifests and CRDs
+├── gitops/                   # Kustomize configs
+├── start.sh                  # Single-command startup
+└── .env                      # Secrets (gitignored)
+```
 
-Comprehensive documentation is available in the `docs/` directory:
+## Secrets
 
-- Architecture designs and decisions
-- API documentation
-- Deployment guides
-- Security policies
+Create `.env` in the project root (never committed):
 
-## Contributing
+```bash
+GROQ_API_KEY=gsk_...
+```
 
-Please refer to the contribution guidelines in the `docs/` directory before submitting pull requests.
+`start.sh` sources this file automatically.
 
-## License
+## Team
 
-[License information to be added]
+| Component | Student ID |
+|-----------|-----------|
+| ICAP Operator | IT22347626 (Kulatunga) |
+| Policy Engine | Kaavya |
+| MEDS / Dashboard | IT22347626 |
+| SSDLB | - |
+
+**Academic:** SLIIT 2025/26 — Project 25-26J-043
