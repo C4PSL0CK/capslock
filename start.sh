@@ -14,6 +14,26 @@ NC='\033[0m'
 
 PIDS=()
 
+# ── Kubernetes detection ──────────────────────────────────────────────────────
+# Use k3s kubeconfig if KUBECONFIG is not already set
+if [[ -z "${KUBECONFIG:-}" && -f /etc/rancher/k3s/k3s.yaml ]]; then
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+fi
+
+# Detect whether a K8s cluster is reachable
+K8S_AVAILABLE=false
+if [[ -n "${KUBECONFIG:-}" ]] && command -v kubectl &>/dev/null; then
+    kubectl get nodes &>/dev/null 2>&1 && K8S_AVAILABLE=true || true
+elif command -v k3s &>/dev/null; then
+    k3s kubectl get nodes &>/dev/null 2>&1 && K8S_AVAILABLE=true || true
+fi
+
+if $K8S_AVAILABLE; then
+    echo -e "${GREEN}[k8s] Cluster reachable — icap-operator will be started${NC}"
+else
+    echo -e "${YELLOW}[k8s] No cluster detected — ICAP config stored locally (run sudo ./setup-k8s.sh to connect)${NC}"
+fi
+
 cleanup() {
     echo -e "\n${YELLOW}Stopping all services...${NC}"
     for pid in "${PIDS[@]}"; do
@@ -25,10 +45,10 @@ trap cleanup EXIT INT TERM
 
 # ── 1. Virtual environment ────────────────────────────────────────────────────
 if [ ! -d "$VENV" ]; then
-    echo -e "${BLUE}[1/4] Creating virtual environment...${NC}"
+    echo -e "${BLUE}[1/5] Creating virtual environment...${NC}"
     python3 -m venv "$VENV"
 else
-    echo -e "${BLUE}[1/4] Using existing virtual environment...${NC}"
+    echo -e "${BLUE}[1/5] Using existing virtual environment...${NC}"
 fi
 
 PIP="$VENV/bin/pip"
@@ -39,8 +59,23 @@ UVICORN="$VENV/bin/uvicorn"
 "$PIP" install -q -r "$ROOT/components/policy-engine/api/requirements.txt"
 "$PIP" install -q -r "$ROOT/components/meds-research/requirements.txt"
 
-# ── 2. Start SSDLB (port 8082) ───────────────────────────────────────────────
-echo -e "${BLUE}[2/4] Starting SSDLB controller...${NC}"
+# ── 2. Start icap-operator (if cluster available and binary exists) ──────────
+OPERATOR_BIN="$ROOT/components/icap-operator/bin/manager"
+if $K8S_AVAILABLE && [[ -f "$OPERATOR_BIN" ]]; then
+    echo -e "${BLUE}[2/5] Starting icap-operator...${NC}"
+    cd "$ROOT/components/icap-operator"
+    "$OPERATOR_BIN" \
+        > /tmp/capslock-icap-operator.log 2>&1 &
+    PIDS+=($!)
+    echo -e "${GREEN}      icap-operator running (PID ${PIDS[-1]})${NC}"
+elif $K8S_AVAILABLE && [[ ! -f "$OPERATOR_BIN" ]]; then
+    echo -e "${YELLOW}[2/5] Cluster found but operator not built — run: sudo ./setup-k8s.sh${NC}"
+else
+    echo -e "${YELLOW}[2/5] Skipping icap-operator (no cluster)${NC}"
+fi
+
+# ── 3. Start SSDLB (port 8082) ───────────────────────────────────────────────
+echo -e "${BLUE}[3/5] Starting SSDLB controller...${NC}"
 cd "$ROOT/components/ssdlb/controller"
 POLICY_ENGINE_URL=http://localhost:8001 \
 ICAP_HEALTH_SPREAD_THRESHOLD=70 \
@@ -55,7 +90,7 @@ for i in {1..15}; do
 done
 
 # ── 3. Start Policy Engine (port 8001) ───────────────────────────────────────
-echo -e "${BLUE}[3/4] Starting Policy Engine...${NC}"
+echo -e "${BLUE}[4/5] Starting Policy Engine...${NC}"
 cd "$ROOT/components/policy-engine"
 SSDLB_URL=http://localhost:8082 \
 ICAP_NAMESPACE=capslock-system \
@@ -70,7 +105,7 @@ for i in {1..15}; do
 done
 
 # ── 4. Start MEDS (port 8000) ────────────────────────────────────────────────
-echo -e "${BLUE}[4/4] Starting MEDS...${NC}"
+echo -e "${BLUE}[5/5] Starting MEDS...${NC}"
 cd "$ROOT/components/meds-research"
 POLICY_ENGINE_URL=http://localhost:8001 \
 ICAP_SERVICE_HOST="" \
