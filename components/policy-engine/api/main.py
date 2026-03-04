@@ -419,8 +419,35 @@ async def list_compliance_frameworks():
 
 # ============================================================================
 # ICAP Operator Bridge  (reads/writes the ICAPService CRD via the K8s API)
-# Falls back to structured synthetic data when not running near a cluster.
+# Falls back to a local state file so configuration persists without a cluster.
 # ============================================================================
+
+_ICAP_STATE_FILE = os.path.join(os.path.dirname(__file__), "icap_local_state.json")
+_ICAP_STATE_DEFAULTS: Dict[str, Any] = {
+    "scanning_mode": "block",
+    "replicas": 3,
+    "health_score": 92,
+    "clamav_image": "clamav/clamav:latest",
+}
+
+def _load_local_icap_state() -> Dict[str, Any]:
+    state = dict(_ICAP_STATE_DEFAULTS)
+    try:
+        with open(_ICAP_STATE_FILE) as f:
+            state.update(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return state
+
+def _save_local_icap_state(updates: Dict[str, Any]) -> Dict[str, Any]:
+    state = _load_local_icap_state()
+    state.update({k: v for k, v in updates.items() if v is not None})
+    tmp = _ICAP_STATE_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+    os.replace(tmp, _ICAP_STATE_FILE)
+    return state
+
 
 def _get_icap_crd_status() -> Dict[str, Any]:
     """
@@ -456,18 +483,19 @@ def _get_icap_crd_status() -> Dict[str, Any]:
 
 
 def _synthetic_icap_status() -> Dict[str, Any]:
-    """Structured synthetic status used when no K8s cluster is available."""
+    """Local state used when no K8s cluster is available. Reads persisted config."""
+    s = _load_local_icap_state()
     return {
         "name":              ICAP_SERVICE_NAME,
         "namespace":         ICAP_NAMESPACE,
-        "ready_replicas":    3,
-        "desired_replicas":  3,
-        "health_score":      92,
+        "ready_replicas":    s["replicas"],
+        "desired_replicas":  s["replicas"],
+        "health_score":      s["health_score"],
         "last_scaling_time": datetime.utcnow().isoformat(),
         "conditions":        [{"type": "Ready", "status": "True"}],
-        "scanning_mode":     "block",
-        "clamav_image":      "clamav/clamav:latest",
-        "source": "synthetic",
+        "scanning_mode":     s["scanning_mode"],
+        "clamav_image":      s["clamav_image"],
+        "source": "local",
     }
 
 
@@ -495,11 +523,15 @@ async def configure_icap_operator(req: IcapConfigureRequest):
     Accepted by MEDS when a promotion changes the security posture of an environment.
     """
     if not K8S_AVAILABLE:
-        return {
-            "status": "accepted_synthetic",
-            "message": "No K8s cluster reachable — change recorded but not applied",
+        saved = _save_local_icap_state({
             "scanning_mode": req.scanning_mode,
             "replicas":      req.replicas,
+        })
+        return {
+            "status": "applied_local",
+            "message": "Configuration saved locally — will be applied to K8s when a cluster is connected",
+            "patch": {k: v for k, v in {"scanning_mode": req.scanning_mode, "replicas": req.replicas}.items() if v is not None},
+            "current_state": saved,
         }
 
     patch: Dict[str, Any] = {"spec": {}}

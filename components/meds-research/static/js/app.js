@@ -581,11 +581,12 @@ document.getElementById('icap-configure-form').addEventListener('submit', async 
         const result = await res.json();
 
         if (result.status === 'patched') {
-            showToast('ICAP operator configuration applied', 'success');
-            resultEl.innerHTML = `<span style="color:var(--success)">Applied: ${JSON.stringify(result.patch)}</span>`;
-        } else if (result.status === 'accepted_synthetic') {
-            showToast('Recorded (no live cluster)', 'success');
-            resultEl.innerHTML = `<span class="text-muted">${result.message}</span>`;
+            showToast('Configuration applied to K8s cluster', 'success');
+            resultEl.innerHTML = `<span style="color:var(--success)">Applied to K8s: ${JSON.stringify(result.patch)}</span>`;
+        } else if (result.status === 'applied_local') {
+            showToast('Configuration saved — active immediately', 'success');
+            const patch = result.patch ?? {};
+            resultEl.innerHTML = `<span style="color:var(--success)">Saved: ${JSON.stringify(patch)}</span><br><small class="text-muted">${result.message}</small>`;
         } else {
             resultEl.innerHTML = `<span style="color:var(--danger)">${JSON.stringify(result)}</span>`;
         }

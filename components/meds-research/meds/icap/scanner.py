@@ -155,11 +155,25 @@ class ICAPScanner:
     # -------------------------------------------------------------------------
     # Layer 2 — Policy-engine compliance gate
     # -------------------------------------------------------------------------
+    def _get_scanning_mode(self) -> str:
+        """Fetch the current scanning_mode from the policy-engine ICAP health endpoint."""
+        try:
+            r = httpx.get(f"{POLICY_ENGINE_URL}/api/icap/health", timeout=3.0)
+            r.raise_for_status()
+            return r.json().get("scanning_mode", "block")
+        except Exception:
+            return "block"
+
     def _policy_engine_scan(self, version: str, application_name: str) -> ICAPScanResult:
         """
         Calls the policy-engine /api/integration/icap/policy-status endpoint.
-        Treats compliance violations as the equivalent of an ICAP threat signal.
+        The result is then filtered through the configured scanning_mode:
+          block    — violations block the promotion (threat_found = True)
+          warn     — violations set low_coverage_warning but never block
+          log-only — violations are logged only; scan always passes
         """
+        scanning_mode = self._get_scanning_mode()
+
         url = f"{POLICY_ENGINE_URL}/api/integration/icap/policy-status/{application_name}"
         response = httpx.get(url, timeout=5.0)
         response.raise_for_status()
@@ -169,15 +183,27 @@ class ICAPScanner:
         policy_approved: bool   = data.get("policy_approved", True)
         violations: int         = data.get("violations", 0)
 
-        coverage_score = int(compliance_score * 100)
-        threat_found   = not policy_approved or violations > 0
-        threat_type    = "policy_violation" if threat_found else None
+        coverage_score  = int(compliance_score * 100)
+        raw_issue       = not policy_approved or violations > 0
+
+        if scanning_mode == "block":
+            threat_found = raw_issue
+            threat_type  = "policy_violation" if threat_found else None
+            low_warn     = coverage_score < 75
+        elif scanning_mode == "warn":
+            threat_found = False          # never block in warn mode
+            threat_type  = None
+            low_warn     = raw_issue or coverage_score < 75
+        else:  # log-only
+            threat_found = False
+            threat_type  = None
+            low_warn     = False
 
         result = ICAPScanResult(
             threat_found=threat_found,
             threat_type=threat_type,
             coverage_score=coverage_score,
-            low_coverage_warning=coverage_score < 75,
+            low_coverage_warning=low_warn,
             scanned_at=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -187,6 +213,8 @@ class ICAPScanner:
             application_name=application_name,
             threat_found=threat_found,
             coverage_score=coverage_score,
+            scanning_mode=scanning_mode,
+            raw_issue=raw_issue,
             mode="policy_engine",
         )
         return result
