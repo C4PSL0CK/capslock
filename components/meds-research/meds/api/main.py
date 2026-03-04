@@ -2,9 +2,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 import uuid
 import time
+import os
+import httpx
 
 from meds.models.promotion import Promotion, Environment, ApplicationRef, PolicyMigration, PromotionSpec
 from meds.models.requests import CreatePromotionRequest, RollbackRequest
@@ -15,6 +17,8 @@ from meds.policy.version_store import PolicyVersionStore
 from meds.monitoring import metrics
 from meds.utils.logger import setup_logging, get_logger
 from prometheus_client import CONTENT_TYPE_LATEST
+
+POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
 
 # Setup logging
 setup_logging()
@@ -251,6 +255,57 @@ async def rollback_environment(name: str, body: RollbackRequest):
         return rolled_back.model_dump()
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/icap/status")
+async def get_icap_status():
+    """Proxy: ICAP operator full CRD status (from policy-engine)."""
+    if not POLICY_ENGINE_URL:
+        return {"source": "synthetic", "error": "POLICY_ENGINE_URL not set",
+                "name": "capslock-icap", "namespace": "capslock-system",
+                "ready_replicas": 3, "desired_replicas": 3, "health_score": 92,
+                "scanning_mode": "block", "clamav_image": "clamav/clamav:latest",
+                "conditions": [{"type": "Ready", "status": "True"}]}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            r = await client.get(f"{POLICY_ENGINE_URL}/api/icap/operator/status")
+            return r.json()
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.get("/api/icap/health")
+async def get_icap_health():
+    """Proxy: compact ICAP health summary used by SSDLB and the dashboard."""
+    if not POLICY_ENGINE_URL:
+        return {"aggregate_health_score": 92, "ready_replicas": 3, "desired_replicas": 3,
+                "all_ready": True, "scanning_mode": "block", "source": "synthetic",
+                "instances": {"a": {"health_score": 94, "ready": True},
+                              "b": {"health_score": 91, "ready": True},
+                              "c": {"health_score": 90, "ready": True}}}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            r = await client.get(f"{POLICY_ENGINE_URL}/api/icap/health")
+            return r.json()
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+
+
+@app.post("/api/icap/configure")
+async def configure_icap(body: Dict[str, Any]):
+    """Proxy: patch the ICAPService CRD spec via the policy-engine bridge."""
+    if not POLICY_ENGINE_URL:
+        return {"status": "accepted_synthetic",
+                "message": "POLICY_ENGINE_URL not set — change not forwarded",
+                **body}
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            r = await client.post(
+                f"{POLICY_ENGINE_URL}/api/icap/operator/configure", json=body
+            )
+            return r.json()
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")

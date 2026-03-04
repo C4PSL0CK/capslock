@@ -36,6 +36,7 @@
 
         <nav class="tab-nav">
             <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+            <button class="tab-btn" data-tab="icap" onclick="switchTab('icap')">ICAP Operator</button>
             <button class="tab-btn" data-tab="audit" onclick="switchTab('audit')">Audit Log</button>
             <button class="tab-btn" data-tab="versions" onclick="switchTab('versions')">Policy Versions</button>
         </nav>
@@ -82,6 +83,55 @@
             <div class="card">
                 <h2>Recent Promotions</h2>
                 <div id="promotions-list"></div>
+            </div>
+        </div>
+
+        <!-- ICAP Operator Tab -->
+        <div id="tab-icap" class="tab-panel hidden">
+
+            <!-- Status row -->
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>ICAP Operator Status</h2>
+                    <button class="btn btn-secondary btn-icon" onclick="loadICAPStatus()">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <polyline points="1 20 1 14 7 14"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        Refresh
+                    </button>
+                </div>
+                <div id="icap-status-panel"><p class="empty-state">Loading ICAP status…</p></div>
+            </div>
+
+            <!-- Per-instance health -->
+            <div class="card">
+                <h2>Instance Health</h2>
+                <div id="icap-instances-panel"><p class="empty-state">Loading…</p></div>
+            </div>
+
+            <!-- Configure form -->
+            <div class="card">
+                <h2>Configure ICAP Operator</h2>
+                <form id="icap-configure-form">
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1">
+                            <label>Scanning Mode</label>
+                            <select id="icap-scanning-mode">
+                                <option value="log-only">log-only — scan and log, never block</option>
+                                <option value="warn">warn — scan and warn, never block</option>
+                                <option value="block" selected>block — scan and block threats</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex:1">
+                            <label>Replicas <span class="label-hint">— 1–10</span></label>
+                            <input type="number" id="icap-replicas" min="1" max="10" placeholder="e.g. 3">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Apply Configuration</button>
+                </form>
+                <div id="icap-configure-result" style="margin-top:12px"></div>
             </div>
         </div>
 

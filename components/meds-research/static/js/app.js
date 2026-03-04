@@ -263,9 +263,14 @@ function switchTab(name) {
     document.querySelector(`[data-tab="${name}"]`).classList.add('active');
 
     clearInterval(auditRefreshTimer);
+    clearInterval(icapRefreshTimer);
     auditRefreshTimer = null;
+    icapRefreshTimer  = null;
 
-    if (name === 'audit') {
+    if (name === 'icap') {
+        loadICAPStatus();
+        icapRefreshTimer = setInterval(loadICAPStatus, 15000);
+    } else if (name === 'audit') {
         loadAuditLog();
         auditRefreshTimer = setInterval(loadAuditLog, 10000);
     } else if (name === 'versions') {
@@ -451,6 +456,144 @@ function formatTime(isoStr) {
 function formatDateTime(isoStr) {
     return new Date(isoStr).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
+
+// --- ICAP Operator tab ---
+let icapRefreshTimer = null;
+
+async function loadICAPStatus() {
+    try {
+        const [statusRes, healthRes] = await Promise.all([
+            fetch(`${API_BASE}/icap/status`),
+            fetch(`${API_BASE}/icap/health`),
+        ]);
+        const status = await statusRes.json();
+        const health = await healthRes.json();
+        renderICAPStatus(status, health);
+        renderICAPInstances(health);
+
+        // Pre-fill configure form with current live values
+        const modeEl = document.getElementById('icap-scanning-mode');
+        if (modeEl && status.scanning_mode) modeEl.value = status.scanning_mode;
+        const repEl = document.getElementById('icap-replicas');
+        if (repEl && status.desired_replicas) repEl.value = status.desired_replicas;
+    } catch (err) {
+        document.getElementById('icap-status-panel').innerHTML =
+            `<p class="empty-state" style="color:var(--danger)">Failed to load ICAP status: ${err.message}</p>`;
+    }
+}
+
+function renderICAPStatus(status, health) {
+    const score     = health.aggregate_health_score ?? status.health_score ?? 0;
+    const scoreClass = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger';
+    const ready     = status.ready_replicas   ?? health.ready_replicas   ?? 0;
+    const desired   = status.desired_replicas ?? health.desired_replicas ?? 0;
+    const mode      = status.scanning_mode    ?? health.scanning_mode    ?? '—';
+    const source    = status.source           ?? health.source           ?? '—';
+    const modeClass = mode === 'block' ? 'danger' : mode === 'warn' ? 'warning' : 'success';
+
+    document.getElementById('icap-status-panel').innerHTML = `
+        <div class="stats-grid" style="margin:0 0 16px">
+            <div class="stat-card ${scoreClass}">
+                <div class="stat-value">${score}</div>
+                <div class="stat-label">Health Score</div>
+            </div>
+            <div class="stat-card ${ready === desired ? 'success' : 'warning'}">
+                <div class="stat-value">${ready}/${desired}</div>
+                <div class="stat-label">Ready Replicas</div>
+            </div>
+            <div class="stat-card ${modeClass}">
+                <div class="stat-value" style="font-size:1.1rem;text-transform:uppercase">${mode}</div>
+                <div class="stat-label">Scanning Mode</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" style="font-size:1rem">${source}</div>
+                <div class="stat-label">Data Source</div>
+            </div>
+        </div>
+        <div class="icap-coverage-row" style="max-width:420px">
+            <span class="icap-coverage-label">Aggregate health: ${score}/100</span>
+            <div class="coverage-bar">
+                <div class="coverage-fill ${score >= 75 ? 'coverage-good' : 'coverage-warn'}" style="width:${score}%"></div>
+            </div>
+        </div>
+        ${status.clamav_image ? `<p class="text-muted" style="margin-top:10px;font-size:0.85rem">ClamAV image: <code class="mono">${status.clamav_image}</code></p>` : ''}
+    `;
+}
+
+function renderICAPInstances(health) {
+    const instances = health.instances ?? {};
+    const keys = Object.keys(instances);
+    if (keys.length === 0) {
+        document.getElementById('icap-instances-panel').innerHTML =
+            '<p class="empty-state">No per-instance data available.</p>';
+        return;
+    }
+
+    const rows = keys.map(ver => {
+        const inst     = instances[ver];
+        const score    = inst.health_score ?? 0;
+        const readyBadge = inst.ready
+            ? '<span class="badge badge-approved">ready</span>'
+            : '<span class="badge badge-rejected">not ready</span>';
+        const barClass = score >= 75 ? 'coverage-good' : 'coverage-warn';
+        return `
+            <tr>
+                <td><strong>Instance ${ver.toUpperCase()}</strong></td>
+                <td>${readyBadge}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <div class="coverage-bar" style="width:140px">
+                            <div class="coverage-fill ${barClass}" style="width:${score}%"></div>
+                        </div>
+                        <span>${score}/100</span>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    document.getElementById('icap-instances-panel').innerHTML = `
+        <table class="data-table">
+            <thead><tr><th>Instance</th><th>Status</th><th>Health Score</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+}
+
+document.getElementById('icap-configure-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const resultEl = document.getElementById('icap-configure-result');
+    resultEl.innerHTML = '<span class="text-muted">Applying…</span>';
+
+    const mode     = document.getElementById('icap-scanning-mode').value;
+    const replicas = parseInt(document.getElementById('icap-replicas').value, 10);
+
+    const body = {};
+    if (mode)              body.scanning_mode = mode;
+    if (!isNaN(replicas))  body.replicas      = replicas;
+
+    try {
+        const res = await fetch(`${API_BASE}/icap/configure`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(body),
+        });
+        const result = await res.json();
+
+        if (result.status === 'patched') {
+            showToast('ICAP operator configuration applied', 'success');
+            resultEl.innerHTML = `<span style="color:var(--success)">Applied: ${JSON.stringify(result.patch)}</span>`;
+        } else if (result.status === 'accepted_synthetic') {
+            showToast('Recorded (no live cluster)', 'success');
+            resultEl.innerHTML = `<span class="text-muted">${result.message}</span>`;
+        } else {
+            resultEl.innerHTML = `<span style="color:var(--danger)">${JSON.stringify(result)}</span>`;
+        }
+        setTimeout(loadICAPStatus, 800);
+    } catch (err) {
+        resultEl.innerHTML = `<span style="color:var(--danger)">Error: ${err.message}</span>`;
+    }
+});
 
 // --- Theme ---
 function toggleTheme() {
