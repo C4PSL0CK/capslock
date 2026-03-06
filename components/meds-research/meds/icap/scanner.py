@@ -22,7 +22,7 @@ ICAP_SERVICE_PORT = int(os.getenv("ICAP_SERVICE_PORT", "1344"))
 POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
 
 # Cache TTL for scanning_mode (seconds) — avoids a round-trip on every scan
-_SCANNING_MODE_TTL = 60
+_SCANNING_MODE_TTL = 5
 
 
 class ICAPScanResult(BaseModel):
@@ -65,7 +65,8 @@ class ICAPScanner:
                 )
 
         # 3. Deterministic simulation (offline / CI)
-        return self._simulated_scan(version, application_name)
+        mode = self._get_scanning_mode() if POLICY_ENGINE_URL else "block"
+        return self._simulated_scan(version, application_name, mode)
 
     # -------------------------------------------------------------------------
     # Layer 1 — RFC 3507 ICAP RESPMOD over raw TCP socket
@@ -236,7 +237,7 @@ class ICAPScanner:
     # -------------------------------------------------------------------------
     # Layer 3 — Deterministic simulation (offline / CI)
     # -------------------------------------------------------------------------
-    def _simulated_scan(self, version: str, application_name: str) -> ICAPScanResult:
+    def _simulated_scan(self, version: str, application_name: str, scanning_mode: str = "block") -> ICAPScanResult:
         """Deterministic simulation used when policy-engine is unreachable."""
         seed = int(hashlib.sha256(f"{version}:{application_name}".encode()).hexdigest(), 16)
         rng  = random.Random(seed)
@@ -256,15 +257,28 @@ class ICAPScanner:
             threat_threshold = 0.05
             cov_lo, cov_hi   = 85, 99
 
-        threat_found   = rng.random() < threat_threshold
-        threat_type    = rng.choice(["malware", "vulnerability", "suspicious_pattern"]) if threat_found else None
+        raw_threat     = rng.random() < threat_threshold
+        raw_type       = rng.choice(["malware", "vulnerability", "suspicious_pattern"]) if raw_threat else None
         coverage_score = rng.randint(cov_lo, cov_hi)
+
+        if scanning_mode == "block":
+            threat_found = raw_threat
+            threat_type  = raw_type
+            low_warn     = coverage_score < 75
+        elif scanning_mode == "warn":
+            threat_found = False
+            threat_type  = None
+            low_warn     = raw_threat or coverage_score < 75
+        else:  # log-only
+            threat_found = False
+            threat_type  = None
+            low_warn     = False
 
         result = ICAPScanResult(
             threat_found=threat_found,
             threat_type=threat_type,
             coverage_score=coverage_score,
-            low_coverage_warning=coverage_score < 75,
+            low_coverage_warning=low_warn,
             scanned_at=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -274,6 +288,7 @@ class ICAPScanner:
             application_name=application_name,
             threat_found=threat_found,
             coverage_score=coverage_score,
+            scanning_mode=scanning_mode,
             mode="simulated",
         )
         return result

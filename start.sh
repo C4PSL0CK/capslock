@@ -114,8 +114,10 @@ done
 echo -e "${BLUE}[5/5] Starting MEDS...${NC}"
 cd "$ROOT/components/meds-research"
 POLICY_ENGINE_URL=http://localhost:8001 \
+SSDLB_URL=http://localhost:8082 \
 ICAP_SERVICE_HOST="" \
 ICAP_SERVICE_PORT=1344 \
+GROQ_API_KEY="${GROQ_API_KEY:-}" \
     "$UVICORN" meds.api.main:app --host 0.0.0.0 --port 8000 --log-level warning \
     > /tmp/capslock-meds.log 2>&1 &
 PIDS+=($!)
@@ -139,4 +141,6 @@ echo -e "${GREEN}║  Press Ctrl+C to stop                        ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
-wait
+# Keep alive until Ctrl+C — ignore individual process exits so set -e
+# does not fire when the icap-operator or any child exits on its own.
+while true; do sleep 5; done

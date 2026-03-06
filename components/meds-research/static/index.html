@@ -3,131 +3,165 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CAPSLOCK</title>
-    <link rel="stylesheet" href="/static/css/styles.css">
+    <title>CAPSLOCK — Deployment Security Platform</title>
+    <link rel="stylesheet" href="/static/css/styles.css?v=3">
 </head>
 <body>
     <button class="theme-toggle" onclick="toggleTheme()"></button>
 
     <div class="container">
+
+        <!-- ── Header ─────────────────────────────────────────────────────── -->
         <header class="header">
-            <h1>CAPSLOCK</h1>
-            <p>Multi-Environment Deployment System</p>
+            <div class="header-inner">
+                <div class="header-brand">
+                    <div class="header-logo-row">
+                        <h1>CAPSLOCK</h1>
+                    </div>
+                    <p class="header-tagline">Kubernetes-Native Deployment Security Platform</p>
+                    <p class="header-sub">ICAP content scanning &nbsp;·&nbsp; Policy enforcement &nbsp;·&nbsp; Health-aware routing &nbsp;·&nbsp; AI assistant</p>
+                </div>
+                <div id="system-status" class="system-status-bar">
+                    <div class="component-badge"><span class="component-dot"></span>Checking components…</div>
+                </div>
+            </div>
         </header>
 
+        <!-- ── KPI strip ──────────────────────────────────────────────────── -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-value" id="total-promotions">0</div>
+                <div class="stat-value" id="total-promotions">—</div>
                 <div class="stat-label">Total Promotions</div>
             </div>
             <div class="stat-card success">
-                <div class="stat-value" id="approved">0</div>
+                <div class="stat-value" id="approved">—</div>
                 <div class="stat-label">Approved</div>
             </div>
             <div class="stat-card danger">
-                <div class="stat-value" id="rejected">0</div>
+                <div class="stat-value" id="rejected">—</div>
                 <div class="stat-label">Rejected</div>
             </div>
             <div class="stat-card warning">
-                <div class="stat-value" id="avg-risk">0</div>
+                <div class="stat-value" id="avg-risk">—</div>
                 <div class="stat-label">Avg Risk Score</div>
+            </div>
+            <div class="stat-card" id="icap-health-card">
+                <div class="stat-value" id="icap-health-stat">—</div>
+                <div class="stat-label">ICAP Health</div>
             </div>
         </div>
 
+        <!-- ── Tab navigation ────────────────────────────────────────────── -->
         <nav class="tab-nav">
-            <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
-            <button class="tab-btn" data-tab="icap" onclick="switchTab('icap')">ICAP Operator</button>
-            <button class="tab-btn" data-tab="audit" onclick="switchTab('audit')">Audit Log</button>
-            <button class="tab-btn" data-tab="versions" onclick="switchTab('versions')">Policy Versions</button>
-            <button class="tab-btn" data-tab="validation" onclick="switchTab('validation')">Validation</button>
-            <button class="tab-btn" data-tab="assistant" onclick="switchTab('assistant')">Assistant</button>
+            <button class="tab-btn active" data-tab="dashboard"     onclick="switchTab('dashboard')">Dashboard</button>
+            <button class="tab-btn"         data-tab="icap"          onclick="switchTab('icap')">ICAP Operator</button>
+            <button class="tab-btn"         data-tab="audit"         onclick="switchTab('audit')">Audit Log</button>
+            <button class="tab-btn"         data-tab="versions"      onclick="switchTab('versions')">Policy Versions</button>
+            <button class="tab-btn"         data-tab="validation"    onclick="switchTab('validation')">Validation</button>
+            <button class="tab-btn"         data-tab="policy-engine" onclick="switchTab('policy-engine')">Policy Engine</button>
+            <button class="tab-btn"         data-tab="load-balancer" onclick="switchTab('load-balancer')">Load Balancer</button>
+            <button class="tab-btn"         data-tab="assistant"     onclick="switchTab('assistant')">Assistant</button>
         </nav>
 
-        <!-- Dashboard Tab -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             DASHBOARD TAB
+        ════════════════════════════════════════════════════════════════════ -->
         <div id="tab-dashboard" class="tab-panel">
+
+            <!-- Create promotion -->
             <div class="card">
                 <div class="card-header">
-                    <h2>Create New Promotion</h2>
+                    <h2>Create Promotion</h2>
+                    <p class="card-desc">Promote an application version through environments. ICAP scanning and risk scoring run automatically.</p>
                 </div>
                 <form id="promotion-form">
                     <div class="form-row">
-                        <input type="text" id="name" placeholder="Promotion Name" required>
-                        <input type="text" id="app-name" placeholder="Application Name" required>
+                        <input type="text" id="name" placeholder="Promotion name (e.g. payment-svc-v2.1.0)" required>
+                        <input type="text" id="app-name" placeholder="Application name" required>
                     </div>
                     <div class="form-row">
                         <select id="source-env" required>
-                            <option value="">Source Environment</option>
+                            <option value="">Source environment</option>
                             <option value="development">Development</option>
                             <option value="staging">Staging</option>
                         </select>
                         <select id="target-env" required>
-                            <option value="">Target Environment</option>
+                            <option value="">Target environment</option>
                             <option value="staging">Staging</option>
                             <option value="production">Production</option>
                         </select>
                     </div>
                     <div class="form-row">
-                        <input type="text" id="version" placeholder="Version (e.g., v1.2.3)" required>
+                        <input type="text" id="version" placeholder="Version (e.g. v1.2.3)" required>
                         <input type="text" id="app-namespace" placeholder="Namespace (default)">
                     </div>
                     <div class="form-group">
-                        <label>Add Policies <span class="label-hint">attach new policies to this deployment</span></label>
+                        <label>Add Policies <span class="label-hint">attach to this deployment</span></label>
                         <div id="policy-selector"></div>
                     </div>
                     <div class="form-group">
-                        <label>Remove Policies <span class="label-hint">detach policies currently active in the target environment</span></label>
-                        <div id="remove-policy-selector"><p class="empty-state" style="font-size:0.85rem;padding:8px 0">Select a target environment above to see removable policies.</p></div>
+                        <label>Remove Policies <span class="label-hint">detach from target environment</span></label>
+                        <div id="remove-policy-selector"><p class="empty-state" style="font-size:0.85rem;padding:8px 0">Select a target environment to see removable policies.</p></div>
                     </div>
-                    <button type="submit" class="btn btn-primary">Create Promotion</button>
+                    <button type="submit" class="btn btn-primary">Run Promotion</button>
                 </form>
             </div>
 
+            <!-- Recent promotions -->
             <div class="card">
-                <h2>Recent Promotions</h2>
+                <div class="card-header-row">
+                    <h2>Recent Promotions</h2>
+                    <button class="btn btn-secondary btn-icon" onclick="loadData()">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        Refresh
+                    </button>
+                </div>
                 <div id="promotions-list"></div>
             </div>
         </div>
 
-        <!-- ICAP Operator Tab -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             ICAP OPERATOR TAB
+        ════════════════════════════════════════════════════════════════════ -->
         <div id="tab-icap" class="tab-panel hidden">
 
-            <!-- Status row -->
+            <div class="tab-intro">
+                <strong>ICAP Operator</strong> — Kubernetes operator managing ClamAV-backed ICAP (RFC 3507) scanning services.
+                Every promotion artifact is streamed through ClamAV before it can reach production.
+            </div>
+
             <div class="card">
                 <div class="card-header-row">
-                    <h2>ICAP Operator Status</h2>
+                    <h2>Operator Status</h2>
                     <button class="btn btn-secondary btn-icon" onclick="loadICAPStatus()">
-                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 4 23 10 17 10"/>
-                            <polyline points="1 20 1 14 7 14"/>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                        </svg>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                         Refresh
                     </button>
                 </div>
                 <div id="icap-status-panel"><p class="empty-state">Loading ICAP status…</p></div>
             </div>
 
-            <!-- Per-instance health -->
             <div class="card">
-                <h2>Instance Health</h2>
+                <h2>Per-Instance Health</h2>
+                <p class="card-desc">Health sub-scores: Readiness 25% · Latency 25% · Signature freshness 20% · Error rate 15% · Resources 10% · Queue 5%</p>
                 <div id="icap-instances-panel"><p class="empty-state">Loading…</p></div>
             </div>
 
-            <!-- Configure form -->
             <div class="card">
-                <h2>Configure ICAP Operator</h2>
+                <h2>Configure Operator</h2>
+                <p class="card-desc">Changes are applied to the <code class="mono">ICAPService</code> CRD in Kubernetes and persisted locally for offline resilience.</p>
                 <form id="icap-configure-form">
                     <div class="form-row">
                         <div class="form-group" style="flex:1">
                             <label>Scanning Mode</label>
                             <select id="icap-scanning-mode">
-                                <option value="log-only">log-only: scan and log, never block</option>
-                                <option value="warn">warn: scan and warn, never block</option>
-                                <option value="block" selected>block: scan and block threats</option>
+                                <option value="log-only">log-only — scan and log, never block</option>
+                                <option value="warn">warn — scan and warn, never block</option>
+                                <option value="block" selected>block — scan and block threats</option>
                             </select>
                         </div>
                         <div class="form-group" style="flex:1">
-                            <label>Replicas <span class="label-hint">1-10</span></label>
+                            <label>Replicas <span class="label-hint">1–10</span></label>
                             <input type="number" id="icap-replicas" min="1" max="10" placeholder="e.g. 3">
                         </div>
                     </div>
@@ -137,11 +171,16 @@
             </div>
         </div>
 
-        <!-- Audit Log Tab -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             AUDIT LOG TAB
+        ════════════════════════════════════════════════════════════════════ -->
         <div id="tab-audit" class="tab-panel hidden">
+            <div class="tab-intro">
+                <strong>Audit Log</strong> — Immutable event trail for every promotion decision, ICAP scan result, policy change, and rollback.
+            </div>
             <div class="card">
                 <div class="card-header-row">
-                    <h2>Audit Log</h2>
+                    <h2>Event Log</h2>
                     <div class="card-controls">
                         <select id="audit-filter" onchange="loadAuditLog()">
                             <option value="">All Events</option>
@@ -152,11 +191,7 @@
                             <option value="promotion_created">Created</option>
                         </select>
                         <button class="btn btn-secondary btn-icon" onclick="loadAuditLog()">
-                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="23 4 23 10 17 10"/>
-                                <polyline points="1 20 1 14 7 14"/>
-                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                            </svg>
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                             Refresh
                         </button>
                     </div>
@@ -165,11 +200,16 @@
             </div>
         </div>
 
-        <!-- Policy Versions Tab -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             POLICY VERSIONS TAB
+        ════════════════════════════════════════════════════════════════════ -->
         <div id="tab-versions" class="tab-panel hidden">
+            <div class="tab-intro">
+                <strong>Policy Versions</strong> — Snapshot history of active policies per environment after each approved promotion. Roll back to any prior state instantly.
+            </div>
             <div class="card">
                 <div class="card-header-row">
-                    <h2>Policy Version History</h2>
+                    <h2>Version History</h2>
                     <select id="versions-env-select" onchange="loadVersions(this.value)">
                         <option value="development">Development</option>
                         <option value="staging">Staging</option>
@@ -180,15 +220,21 @@
             </div>
         </div>
 
-        <!-- Validation Tab -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             VALIDATION TAB
+        ════════════════════════════════════════════════════════════════════ -->
         <div id="tab-validation" class="tab-panel hidden">
 
-            <!-- Top row: two interactive tools side by side -->
+            <div class="tab-intro">
+                <strong>Validation Lab</strong> — Interactive tools to explore the risk scoring model, detect policy conflicts, and simulate ICAP health and SLDB routing scenarios before they reach production.
+            </div>
+
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
 
-                <!-- 1. Risk Score Calculator -->
+                <!-- Risk Score Calculator -->
                 <div class="card" style="margin:0">
                     <h2>Risk Score Calculator</h2>
+                    <p class="card-desc">Explore how version type, policy changes, and environment transitions affect the weighted risk score.</p>
                     <form id="risk-score-form">
                         <div class="form-group">
                             <label>Version</label>
@@ -212,15 +258,15 @@
                         </div>
                         <div class="form-row">
                             <div class="form-group" style="flex:1">
-                                <label>Policies to add</label>
+                                <label>Policies added</label>
                                 <input type="number" id="rs-add-policies" min="0" max="10" value="0">
                             </div>
                             <div class="form-group" style="flex:1">
-                                <label>Policies to remove</label>
+                                <label>Policies removed</label>
                                 <input type="number" id="rs-remove-policies" min="0" max="10" value="0">
                             </div>
                             <div class="form-group" style="flex:1">
-                                <label>Max allowed score</label>
+                                <label>Max allowed</label>
                                 <input type="number" id="rs-max-score" min="1" max="100" value="60">
                             </div>
                         </div>
@@ -229,9 +275,10 @@
                     <div id="risk-score-result" style="margin-top:16px"></div>
                 </div>
 
-                <!-- 2. Policy Conflict Detector -->
+                <!-- Policy Conflict Detector -->
                 <div class="card" style="margin:0">
                     <h2>Policy Conflict Detector</h2>
+                    <p class="card-desc">Detect configuration conflicts between enforcement mode, pod security standards, and compliance frameworks.</p>
                     <form id="conflict-form">
                         <div class="form-row">
                             <div class="form-group" style="flex:1">
@@ -272,29 +319,17 @@
                         <div class="form-group">
                             <label>Compliance Standards</label>
                             <div style="display:flex;gap:20px;flex-wrap:wrap;padding:8px 0">
-                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-                                    <input type="checkbox" id="cf-pci"> PCI-DSS
-                                </label>
-                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-                                    <input type="checkbox" id="cf-cis"> CIS
-                                </label>
-                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-                                    <input type="checkbox" id="cf-soc2"> SOC2
-                                </label>
-                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-                                    <input type="checkbox" id="cf-iso"> ISO 27001
-                                </label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400"><input type="checkbox" id="cf-pci"> PCI-DSS</label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400"><input type="checkbox" id="cf-cis"> CIS</label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400"><input type="checkbox" id="cf-soc2"> SOC2</label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400"><input type="checkbox" id="cf-iso"> ISO 27001</label>
                             </div>
                         </div>
                         <div class="form-group">
                             <label>Security Controls</label>
                             <div style="display:flex;gap:24px;padding:8px 0">
-                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-                                    <input type="checkbox" id="cf-network"> Require network policies
-                                </label>
-                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
-                                    <input type="checkbox" id="cf-limits" checked> Require resource limits
-                                </label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400"><input type="checkbox" id="cf-network"> Network policies</label>
+                                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400"><input type="checkbox" id="cf-limits" checked> Resource limits</label>
                             </div>
                         </div>
                         <button type="submit" class="btn btn-primary" style="width:100%">Detect Conflicts</button>
@@ -304,60 +339,168 @@
 
             </div>
 
-            <!-- 3. Health Score Scenarios -->
+            <!-- ICAP Health Scenarios -->
             <div class="card">
                 <div class="card-header-row">
                     <h2>ICAP Health Score Scenarios</h2>
                     <button class="btn btn-secondary btn-icon" onclick="loadHealthScenarios()">
-                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                        </svg>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                         Refresh
                     </button>
                 </div>
+                <p class="card-desc">How the ICAP Operator health model responds to different failure conditions. Weights: Readiness 25% · Latency 25% · Signatures 20% · Errors 15% · Resources 10% · Queue 5%</p>
                 <div id="health-scenarios-panel"><p class="empty-state">Loading health scenarios…</p></div>
             </div>
 
-            <!-- 4. Traffic Switching Scenarios -->
+            <!-- Traffic Switching Scenarios -->
             <div class="card">
                 <div class="card-header-row">
-                    <h2>Traffic Switching Scenarios</h2>
+                    <h2>SLDB Traffic Routing Scenarios</h2>
                     <button class="btn btn-secondary btn-icon" onclick="loadTrafficScenarios()">
-                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                        </svg>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                         Refresh
                     </button>
                 </div>
+                <p class="card-desc">8 canonical scenarios showing how SLDB's decision engine reacts to traffic spikes, ICAP health degradation, cooldowns, and spread-mode recovery.</p>
                 <div id="traffic-scenarios-panel"><p class="empty-state">Loading traffic scenarios…</p></div>
             </div>
 
         </div>
 
-        <!-- Assistant Tab -->
+        <!-- ═══════════════════════════════════════════════════════════════
+             POLICY ENGINE TAB
+        ════════════════════════════════════════════════════════════════════ -->
+        <div id="tab-policy-engine" class="tab-panel hidden">
+
+            <div class="tab-intro">
+                <strong>Policy Engine</strong> — Environment-aware policy controller. Detects namespace environments from Kubernetes labels, applies compliance-first or risk-level policy strategies, and validates against CIS, PCI-DSS, SOC2, and ISO 27001 frameworks.
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>Namespace Detection</h2>
+                        <button class="btn btn-secondary" onclick="loadPENamespaces()">Refresh</button>
+                    </div>
+                    <p class="card-desc">Environments detected from Kubernetes namespace labels.</p>
+                    <div id="pe-namespaces-panel"><p class="empty-state">Loading…</p></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>Policy Catalog</h2>
+                        <button class="btn btn-secondary" onclick="loadPEPolicies()">Refresh</button>
+                    </div>
+                    <p class="card-desc">Policy templates registered in the Policy Engine.</p>
+                    <div id="pe-policies-panel"><p class="empty-state">Loading…</p></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header-row">
+                    <h2>Compliance Frameworks</h2>
+                    <button class="btn btn-secondary" onclick="loadPEFrameworks()">Refresh</button>
+                </div>
+                <p class="card-desc">Supported compliance standards validated by the Policy Engine.</p>
+                <div id="pe-frameworks-panel"><p class="empty-state">Loading…</p></div>
+            </div>
+
+            <div class="card" style="margin-top:20px">
+                <h2>Apply Policy to Namespace</h2>
+                <p class="card-desc">Enforce a policy on a namespace using the selected conflict resolution strategy.</p>
+                <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+                    <div style="flex:1;min-width:180px">
+                        <label style="display:block;margin-bottom:6px;font-size:0.85rem;opacity:0.7">Namespace</label>
+                        <input id="pe-apply-ns" type="text" placeholder="e.g. prod-test" class="form-input" style="width:100%">
+                    </div>
+                    <div style="flex:1;min-width:180px">
+                        <label style="display:block;margin-bottom:6px;font-size:0.85rem;opacity:0.7">Conflict Strategy</label>
+                        <select id="pe-apply-strategy" class="form-input" style="width:100%">
+                            <option value="compliance-first">Compliance-first</option>
+                            <option value="priority">Priority</option>
+                            <option value="risk-level">Risk-level</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="applyPEPolicy()" style="height:44px;padding:0 24px">Apply Policy</button>
+                </div>
+                <div id="pe-apply-result" style="margin-top:16px"></div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             LOAD BALANCER TAB
+        ════════════════════════════════════════════════════════════════════ -->
+        <div id="tab-load-balancer" class="tab-panel hidden">
+
+            <div class="tab-intro">
+                <strong>SLDB</strong> — Smart Service Discovery &amp; Load Balancer. Routes ICAP scanning traffic using health-weighted effective load. Enters spread mode on traffic spikes (≥8% growth) and collapses back to single-instance on recovery (≤3% growth). Forces spread if aggregate ICAP health drops below 70.
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>Routing State</h2>
+                        <button class="btn btn-secondary" onclick="loadLBState()">Refresh</button>
+                    </div>
+                    <div id="lb-state-panel"><p class="empty-state">Loading…</p></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>Traffic Trend</h2>
+                        <button class="btn btn-secondary" onclick="loadLBTrend()">Refresh</button>
+                    </div>
+                    <div id="lb-trend-panel"><p class="empty-state">Loading…</p></div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom:20px">
+                <h2>Manual Routing Override</h2>
+                <p class="card-desc">Force traffic to a specific instance or enter spread mode. Cooldown (60s) and health guardrails apply on the next auto-route cycle.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap">
+                    <button class="btn btn-secondary" onclick="lbSetVersion('a')">Route to A</button>
+                    <button class="btn btn-secondary" onclick="lbSetVersion('b')">Route to B</button>
+                    <button class="btn btn-secondary" onclick="lbSetVersion('c')">Route to C</button>
+                    <button class="btn btn-primary"   onclick="lbSetVersion('spread')">Enter Spread Mode</button>
+                    <button class="btn btn-secondary" style="margin-left:auto" onclick="lbAutoRoute()">Run Auto-Route Decision</button>
+                </div>
+                <div id="lb-override-result" style="margin-top:16px"></div>
+            </div>
+
+            <div class="card">
+                <h2>Last Auto-Route Decision</h2>
+                <div id="lb-decision-panel">
+                    <p class="empty-state">Click "Run Auto-Route Decision" to see the latest routing outcome.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             ASSISTANT TAB
+        ════════════════════════════════════════════════════════════════════ -->
         <div id="tab-assistant" class="tab-panel hidden">
             <div class="card" style="display:flex;flex-direction:column;height:600px;padding:0;overflow:hidden">
-                <div class="card-header-row" style="padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
-                    <h2 style="margin:0">CAPSLOCK Assistant</h2>
-                    <span style="font-size:0.78rem;opacity:0.5">Groq llama-3.3-70b-versatile</span>
+                <div class="card-header-row" style="padding:16px 20px;border-bottom:1px solid var(--border-color);flex-shrink:0">
+                    <div>
+                        <h2 style="margin:0">CAPSLOCK Assistant</h2>
+                        <p style="margin:4px 0 0;font-size:0.8rem;opacity:0.55">Ask about promotions, risk scores, ICAP health, or navigate the dashboard. Powered by Groq llama-3.3-70b-versatile.</p>
+                    </div>
                 </div>
                 <div id="chat-messages" style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px">
                     <div class="chat-msg chat-msg-assistant">
                         <div class="chat-bubble">Hi! I can answer questions about your promotions, explain risk scores, navigate the dashboard, or set up a new deployment for you. What would you like to do?</div>
                     </div>
                 </div>
-                <div style="padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;align-items:flex-end">
-                    <textarea id="chat-input" rows="2" placeholder="Ask anything... (Enter to send, Shift+Enter for newline)"
-                        style="flex:1;resize:none;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-size:0.9rem;line-height:1.4"
+                <div style="padding:12px 16px;border-top:1px solid var(--border-color);flex-shrink:0;display:flex;gap:8px;align-items:flex-end">
+                    <textarea id="chat-input" rows="2" placeholder="Ask anything… (Enter to send, Shift+Enter for newline)"
+                        style="flex:1;resize:none;padding:10px 12px;border-radius:8px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-primary);font-family:inherit;font-size:0.9rem;line-height:1.4"
                         onkeydown="handleChatKey(event)"></textarea>
                     <button class="btn btn-primary" onclick="sendChatMessage()" id="chat-send-btn" style="height:44px;padding:0 20px">Send</button>
                 </div>
             </div>
         </div>
 
-        <!-- Result Modal -->
+        <!-- ── Result Modal ────────────────────────────────────────────── -->
         <div id="result-modal" class="modal">
             <div class="modal-content">
                 <span class="close">&times;</span>
@@ -366,6 +509,6 @@
         </div>
     </div>
 
-    <script src="/static/js/app.js"></script>
+    <script src="/static/js/app.js?v=3"></script>
 </body>
 </html>

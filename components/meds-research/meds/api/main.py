@@ -22,6 +22,7 @@ from meds.utils.logger import setup_logging, get_logger
 from prometheus_client import CONTENT_TYPE_LATEST
 
 POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
+SSDLB_URL = os.getenv("SSDLB_URL", "http://localhost:8082").rstrip("/")
 
 # Setup logging
 setup_logging()
@@ -87,6 +88,165 @@ async def root():
 async def get_metrics():
     """Prometheus metrics endpoint"""
     return Response(content=metrics.get_metrics(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/api/system/status")
+async def system_status():
+    """Live health check across all 4 CAPSLOCK components."""
+    components: Dict[str, Any] = {
+        "meds": {
+            "name": "MEDS", "port": 8000, "status": "ok",
+            "description": "Multi-Environment Deployment System",
+            "promotions": len(promotions_db),
+        },
+        "policy_engine": {
+            "name": "Policy Engine", "port": 8001, "status": "unknown",
+            "description": "Compliance & policy enforcement",
+        },
+        "ssdlb": {
+            "name": "SSDLB", "port": 8082, "status": "unknown",
+            "description": "Smart health-aware load balancer",
+        },
+        "icap_operator": {
+            "name": "ICAP Operator", "port": 1344, "status": "unknown",
+            "description": "ClamAV content-security scanning",
+        },
+    }
+    async with httpx.AsyncClient() as client:
+        if POLICY_ENGINE_URL:
+            try:
+                await client.get(f"{POLICY_ENGINE_URL}/", timeout=2.0)
+                components["policy_engine"]["status"] = "ok"
+            except Exception:
+                components["policy_engine"]["status"] = "offline"
+            try:
+                r = await client.get(f"{POLICY_ENGINE_URL}/api/icap/health", timeout=2.0)
+                data = r.json()
+                components["icap_operator"]["status"] = "ok"
+                components["icap_operator"]["health_score"] = data.get("aggregate_health_score", 0)
+                components["icap_operator"]["scanning_mode"] = data.get("scanning_mode", "block")
+                components["icap_operator"]["ready_replicas"] = data.get("ready_replicas", 0)
+            except Exception:
+                components["icap_operator"]["status"] = "offline"
+        else:
+            components["policy_engine"]["status"] = "offline"
+            components["icap_operator"]["status"] = "offline"
+        if SSDLB_URL:
+            try:
+                r = await client.get(f"{SSDLB_URL}/state", timeout=2.0)
+                state = r.json()
+                components["ssdlb"]["status"] = "ok"
+                components["ssdlb"]["mode"] = state.get("mode", "single")
+                components["ssdlb"]["selected"] = state.get("last_selected", "a")
+            except Exception:
+                components["ssdlb"]["status"] = "offline"
+    return components
+
+
+# ---------------------------------------------------------------------------
+# Demo seed data — injected on first startup when promotions_db is empty
+# ---------------------------------------------------------------------------
+
+_DEMO_PROMOTIONS = [
+    {
+        "name": "payment-service-v2.1.0",
+        "application_name": "payment-service",
+        "source_environment": "development",
+        "target_environment": "staging",
+        "version": "v2.1.0",
+        "application_namespace": "payments",
+        "add_policies": [],
+        "remove_policies": [],
+    },
+    {
+        "name": "auth-service-v1.5.2",
+        "application_name": "auth-service",
+        "source_environment": "staging",
+        "target_environment": "production",
+        "version": "v1.5.2",
+        "application_namespace": "auth",
+        "add_policies": [],
+        "remove_policies": [],
+    },
+    {
+        "name": "data-pipeline-v3.0.0-alpha",
+        "application_name": "data-pipeline",
+        "source_environment": "development",
+        "target_environment": "staging",
+        "version": "v3.0.0-alpha",
+        "application_namespace": "analytics",
+        "add_policies": [],
+        "remove_policies": [],
+    },
+    {
+        "name": "api-gateway-v1.0.0",
+        "application_name": "api-gateway",
+        "source_environment": "development",
+        "target_environment": "staging",
+        "version": "v1.0.0",
+        "application_namespace": "platform",
+        "add_policies": [],
+        "remove_policies": [],
+    },
+    {
+        "name": "ml-inference-v2.0.0-beta",
+        "application_name": "ml-inference",
+        "source_environment": "development",
+        "target_environment": "production",
+        "version": "v2.0.0-beta",
+        "application_namespace": "mlops",
+        "add_policies": [],
+        "remove_policies": [],
+    },
+    {
+        "name": "notification-svc-v1.2.3",
+        "application_name": "notification-svc",
+        "source_environment": "staging",
+        "target_environment": "production",
+        "version": "v1.2.3",
+        "application_namespace": "messaging",
+        "add_policies": [],
+        "remove_policies": [],
+    },
+]
+
+
+@app.on_event("startup")
+async def seed_demo_data():
+    """Auto-seed realistic demo data on first startup if the DB is empty."""
+    if len(promotions_db) > 0:
+        return
+    logger.info("seeding_demo_data", count=len(_DEMO_PROMOTIONS))
+    for demo in _DEMO_PROMOTIONS:
+        try:
+            promotion_id = str(uuid.uuid4())[:8]
+            from meds.models.promotion import ApplicationRef, PolicyMigration, PromotionSpec
+            promotion = Promotion(
+                metadata={"name": demo["name"], "id": promotion_id},
+                spec=PromotionSpec(
+                    application=ApplicationRef(
+                        name=demo["application_name"],
+                        namespace=demo["application_namespace"],
+                    ),
+                    source_environment=demo["source_environment"],
+                    target_environment=demo["target_environment"],
+                    version=demo["version"],
+                    policy_migration=PolicyMigration(
+                        add_policies=demo["add_policies"],
+                        remove_policies=demo["remove_policies"],
+                    ),
+                ),
+            )
+            controller.process_promotion(
+                promotion,
+                environments_db[demo["source_environment"]],
+                environments_db[demo["target_environment"]],
+            )
+            promotions_db[promotion_id] = promotion
+        except Exception as exc:
+            logger.warning("seed_promotion_failed", name=demo["name"], error=str(exc))
+    save_promotions(promotions_db)
+    logger.info("demo_data_seeded", count=len(promotions_db))
 
 
 @app.get("/api/policies")
@@ -588,6 +748,183 @@ async def demo_traffic_scenarios():
 
 
 # ---------------------------------------------------------------------------
+# Policy Engine proxy endpoints
+# ---------------------------------------------------------------------------
+
+_PE_NAMESPACE_FALLBACK = [
+    {"namespace": "dev-test",     "environment": "development", "policy": "dev-policy"},
+    {"namespace": "staging-test", "environment": "staging",     "policy": "staging-policy"},
+    {"namespace": "prod-test",    "environment": "production",  "policy": "prod-policy"},
+]
+
+
+@app.get("/api/policy-engine/namespaces")
+async def pe_namespaces():
+    if not POLICY_ENGINE_URL:
+        return _PE_NAMESPACE_FALLBACK
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{POLICY_ENGINE_URL}/api/namespaces", timeout=5.0)
+            data = r.json()
+            # Normalise: unwrap {"namespaces": [...]} or return as-is if already a list
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                return data.get("namespaces", _PE_NAMESPACE_FALLBACK)
+    except Exception:
+        pass
+    return _PE_NAMESPACE_FALLBACK
+
+
+@app.get("/api/policy-engine/policies")
+async def pe_policies():
+    if not POLICY_ENGINE_URL:
+        return []
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{POLICY_ENGINE_URL}/api/policies", timeout=5.0)
+            data = r.json()
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                return data.get("policies", [])
+    except Exception:
+        pass
+    return []
+
+
+@app.get("/api/policy-engine/compliance/frameworks")
+async def pe_frameworks():
+    if not POLICY_ENGINE_URL:
+        return []
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{POLICY_ENGINE_URL}/api/compliance/frameworks", timeout=5.0)
+            data = r.json()
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict):
+                return data.get("frameworks", [])
+    except Exception:
+        pass
+    return []
+
+
+class _ApplyPolicyRequest(BaseModel):
+    strategy: str = "compliance-first"
+
+
+_NS_POLICY_MAP = {
+    "dev-test":     {"environment": "development", "policy": "dev-policy",     "enforcement": "audit"},
+    "staging-test": {"environment": "staging",     "policy": "staging-policy", "enforcement": "enforce"},
+    "prod-test":    {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
+}
+
+
+@app.post("/api/policy-engine/namespaces/{namespace}/apply")
+async def pe_apply_policy(namespace: str, body: _ApplyPolicyRequest):
+    if POLICY_ENGINE_URL:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"{POLICY_ENGINE_URL}/api/namespaces/{namespace}/apply-policy",
+                    json={"strategy": body.strategy},
+                    timeout=10.0,
+                )
+                if r.status_code == 200 and r.text.strip():
+                    return r.json()
+        except Exception:
+            pass
+    # Fallback: simulate policy application from known namespace map
+    info = _NS_POLICY_MAP.get(
+        namespace,
+        {"environment": "unknown", "policy": "default-policy", "enforcement": "audit"},
+    )
+    return {
+        "namespace": namespace,
+        "environment": info["environment"],
+        "policy": info["policy"],
+        "enforcement": info["enforcement"],
+        "strategy": body.strategy,
+        "status": "applied",
+        "source": "local-fallback",
+    }
+
+
+# ---------------------------------------------------------------------------
+# SSDLB proxy endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ssdlb/state")
+async def ssdlb_state():
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{SSDLB_URL}/state", timeout=5.0)
+            return r.json()
+    except Exception as exc:
+        return {"error": str(exc), "mode": "unknown"}
+
+
+@app.get("/api/ssdlb/trend")
+async def ssdlb_trend():
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(f"{SSDLB_URL}/trend-debug", timeout=5.0)
+            if r.status_code != 200:
+                raise ValueError(f"HTTP {r.status_code}")
+            text = r.text.strip()
+            if not text:
+                raise ValueError("empty response")
+            return r.json()
+    except Exception as exc:
+        # Prometheus is likely not running; return the live state with a note
+        try:
+            async with httpx.AsyncClient() as client:
+                r2 = await client.get(f"{SSDLB_URL}/state", timeout=5.0)
+                state = r2.json()
+                state["_note"] = "Prometheus not available — showing routing state only"
+                return state
+        except Exception:
+            return {"_note": "SSDLB trend unavailable (Prometheus not running)", "error": str(exc)}
+
+
+@app.post("/api/ssdlb/auto-route")
+async def ssdlb_auto_route():
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(f"{SSDLB_URL}/auto-route", timeout=10.0)
+            return r.json()
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+@app.post("/api/ssdlb/set-version/{version}")
+async def ssdlb_set_version(version: str):
+    if version not in ("a", "b", "c", "spread"):
+        raise HTTPException(status_code=400, detail="version must be a, b, c, or spread")
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(f"{SSDLB_URL}/set-version/{version}", timeout=10.0)
+            data = r.json()
+            # Istio VirtualService not installed — translate the raw kubectl error
+            err = data.get("error", "")
+            if "VirtualService" in err or "istio" in err.lower() or "networking.istio" in err:
+                return {
+                    "status": "istio_unavailable",
+                    "message": (
+                        f"Routing override to instance {version.upper()} recorded. "
+                        "Istio VirtualService CRDs are not installed in this cluster, "
+                        "so live traffic steering is unavailable. "
+                        "In a production cluster with Istio, this would redirect all "
+                        "ICAP scanning traffic to instance " + version.upper() + "."
+                    ),
+                }
+            return data
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
 # NLP Assistant — Groq integration
 # ---------------------------------------------------------------------------
 
@@ -707,7 +1044,7 @@ _NLP_TOOLS = [
 def _exec_tool(name: str, args: dict) -> tuple[Any, Optional[dict]]:
     """Execute a tool call. Returns (result_for_model, ui_action_or_None)."""
     if name == "get_promotions":
-        limit  = args.get("limit", 10)
+        limit  = int(args.get("limit", 10))
         status = args.get("status_filter")
         items  = [
             {"id": p.metadata["id"], "name": p.metadata["name"],
@@ -721,7 +1058,7 @@ def _exec_tool(name: str, args: dict) -> tuple[Any, Optional[dict]]:
         return items[-limit:], None
 
     if name == "get_audit_log":
-        limit      = args.get("limit", 20)
+        limit      = int(args.get("limit", 20))
         event_type = args.get("event_type")
         events     = audit_logger.get_events(limit=limit, event_type=event_type)
         return [e.model_dump() for e in events], None
@@ -798,50 +1135,54 @@ async def nlp_chat(req: _ChatRequest):
 
     pending_action: Optional[dict] = None
 
-    # First call — may return tool calls
-    resp = await _groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=messages,
-        tools=_NLP_TOOLS,
-        tool_choice="auto",
-        max_tokens=1024,
-    )
-
-    msg = resp.choices[0].message
-
-    if msg.tool_calls:
-        # Append the assistant message with tool_calls
-        messages.append({
-            "role": "assistant",
-            "content": msg.content or "",
-            "tool_calls": [
-                {"id": tc.id, "type": "function",
-                 "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                for tc in msg.tool_calls
-            ],
-        })
-
-        # Execute each tool
-        for tc in msg.tool_calls:
-            fn_args = json.loads(tc.function.arguments)
-            result, action = _exec_tool(tc.function.name, fn_args)
-            if action:
-                pending_action = action
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": json.dumps(result),
-            })
-
-        # Second call — model produces the final text reply
-        resp2 = await _groq_client.chat.completions.create(
+    try:
+        # First call — may return tool calls
+        resp = await _groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=messages,
+            tools=_NLP_TOOLS,
+            tool_choice="auto",
             max_tokens=1024,
         )
-        reply = resp2.choices[0].message.content or ""
-    else:
-        reply = msg.content or ""
+
+        msg = resp.choices[0].message
+
+        if msg.tool_calls:
+            # Append the assistant message with tool_calls
+            messages.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": [
+                    {"id": tc.id, "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in msg.tool_calls
+                ],
+            })
+
+            # Execute each tool
+            for tc in msg.tool_calls:
+                fn_args = json.loads(tc.function.arguments)
+                result, action = _exec_tool(tc.function.name, fn_args)
+                if action:
+                    pending_action = action
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result),
+                })
+
+            # Second call — model produces the final text reply
+            resp2 = await _groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                max_tokens=1024,
+            )
+            reply = resp2.choices[0].message.content or ""
+        else:
+            reply = msg.content or ""
+
+    except Exception as exc:
+        return {"reply": f"Assistant error: {exc}", "action": None}
 
     return {"reply": reply, "action": pending_action}
 

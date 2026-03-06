@@ -585,6 +585,11 @@ async def get_icap_health():
     except Exception:
         s = _synthetic_icap_status()
 
+    # Always use locally persisted scanning_mode — it is the source of truth
+    # for configure changes even when a K8s cluster is connected.
+    local = _load_local_icap_state()
+    s["scanning_mode"] = local["scanning_mode"]
+
     ready    = s["ready_replicas"]
     desired  = s["desired_replicas"]
     score    = s["health_score"]

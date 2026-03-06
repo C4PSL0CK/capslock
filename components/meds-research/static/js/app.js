@@ -99,20 +99,52 @@ function renderPolicies() {
 function renderPromotions() {
     const list = document.getElementById('promotions-list');
     if (promotions.length === 0) {
-        list.innerHTML = '<p class="empty-state">No promotions yet</p>';
+        list.innerHTML = '<p class="empty-state">No promotions yet. Create one above or restart the server to load demo data.</p>';
         return;
     }
 
-    list.innerHTML = promotions.map(p => `
-        <div class="promotion-item">
-            <div>
-                <strong>${p.name}</strong>
-                <br>
-                <small class="text-muted">${p.source} → ${p.target} &nbsp;|&nbsp; ${p.version} &nbsp;|&nbsp; Risk: ${p.risk_score ?? 'N/A'}</small>
-            </div>
-            <span class="badge badge-${p.decision === 'APPROVED' ? 'approved' : 'rejected'}">${p.decision}</span>
-        </div>
-    `).join('');
+    // Show most-recent first
+    const sorted = [...promotions].reverse();
+    list.innerHTML = `
+        <table class="data-table">
+            <thead><tr>
+                <th>Promotion</th>
+                <th>Application</th>
+                <th>Pipeline</th>
+                <th>Version</th>
+                <th style="text-align:center">Risk</th>
+                <th style="text-align:center">Decision</th>
+            </tr></thead>
+            <tbody>
+                ${sorted.map(p => {
+                    const score = p.risk_score ?? null;
+                    const scoreColor = score === null ? '#9ca3af'
+                        : score >= 70 ? '#ef4444' : score >= 40 ? '#f59e0b' : '#10b981';
+                    return `
+                    <tr>
+                        <td>
+                            <strong>${p.name}</strong>
+                            <br><code class="mono" style="font-size:0.75rem">${p.id}</code>
+                        </td>
+                        <td class="text-muted">${p.application || p.app || '—'}</td>
+                        <td>
+                            <span class="env-chip env-${p.source}">${p.source}</span>
+                            <span style="opacity:0.4;margin:0 4px">→</span>
+                            <span class="env-chip env-${p.target}">${p.target}</span>
+                        </td>
+                        <td><code class="mono">${p.version}</code></td>
+                        <td style="text-align:center">
+                            ${score !== null
+                                ? `<span style="font-weight:700;color:${scoreColor}">${score}</span>`
+                                : '<span style="opacity:0.4">—</span>'}
+                        </td>
+                        <td style="text-align:center">
+                            <span class="badge badge-${p.decision === 'APPROVED' ? 'approved' : 'rejected'}">${p.decision}</span>
+                        </td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
 }
 
 function updateStats(analytics) {
@@ -279,6 +311,13 @@ function switchTab(name) {
     } else if (name === 'validation') {
         loadHealthScenarios();
         loadTrafficScenarios();
+    } else if (name === 'policy-engine') {
+        loadPENamespaces();
+        loadPEPolicies();
+        loadPEFrameworks();
+    } else if (name === 'load-balancer') {
+        loadLBState();
+        loadLBTrend();
     } else if (name === 'assistant') {
         document.getElementById('chat-input').focus();
     }
@@ -534,35 +573,57 @@ function renderICAPInstances(health) {
         return;
     }
 
+    const scoreBar = (score, width = 100) => {
+        const c = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
+        return `<div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;max-width:${width}px;height:7px;background:var(--border-color,#e5e7eb);border-radius:4px;overflow:hidden">
+                <div style="height:100%;width:${score}%;background:${c};transition:width .4s"></div>
+            </div>
+            <span style="font-weight:600;color:${c};min-width:32px;text-align:right">${score}</span>
+        </div>`;
+    };
+
     const rows = keys.map(ver => {
-        const inst     = instances[ver];
-        const score    = inst.health_score ?? 0;
-        const readyBadge = inst.ready
-            ? '<span class="badge badge-approved">ready</span>'
-            : '<span class="badge badge-rejected">not ready</span>';
-        const barClass = score >= 75 ? 'coverage-good' : 'coverage-warn';
+        const inst  = instances[ver];
+        const score = inst.health_score ?? 0;
+        const ready = inst.ready;
+        const sub   = inst.sub_scores ?? {};
+        const subKeys = ['readiness','latency','signatures','errors','resources','queue'];
+        const subCols = subKeys.map(k =>
+            `<td style="text-align:center;font-size:0.82rem;color:${
+                (sub[k]??100)>=80?'#10b981':(sub[k]??100)>=60?'#f59e0b':'#ef4444'}">${sub[k]??'—'}</td>`
+        ).join('');
+
         return `
             <tr>
-                <td><strong>Instance ${ver.toUpperCase()}</strong></td>
-                <td>${readyBadge}</td>
                 <td>
-                    <div style="display:flex;align-items:center;gap:10px">
-                        <div class="coverage-bar" style="width:140px">
-                            <div class="coverage-fill ${barClass}" style="width:${score}%"></div>
-                        </div>
-                        <span>${score}/100</span>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <div style="width:10px;height:10px;border-radius:50%;background:${ready?'#10b981':'#ef4444'};flex-shrink:0"></div>
+                        <strong>Instance ${ver.toUpperCase()}</strong>
                     </div>
                 </td>
-            </tr>
-        `;
+                <td style="min-width:160px">${scoreBar(score, 120)}</td>
+                ${subCols}
+            </tr>`;
     }).join('');
 
     document.getElementById('icap-instances-panel').innerHTML = `
-        <table class="data-table">
-            <thead><tr><th>Instance</th><th>Status</th><th>Health Score</th></tr></thead>
+        <table class="data-table" style="font-size:0.88rem">
+            <thead><tr>
+                <th>Instance</th>
+                <th>Overall Score</th>
+                <th style="text-align:center" title="weight 25%">Readiness</th>
+                <th style="text-align:center" title="weight 25%">Latency</th>
+                <th style="text-align:center" title="weight 20%">Signatures</th>
+                <th style="text-align:center" title="weight 15%">Errors</th>
+                <th style="text-align:center" title="weight 10%">Resources</th>
+                <th style="text-align:center" title="weight 5%">Queue</th>
+            </tr></thead>
             <tbody>${rows}</tbody>
         </table>
-    `;
+        <p style="font-size:0.76rem;color:var(--text-secondary,#666);margin-top:8px">
+            Sub-scores shown only when reported by the ICAP Operator (requires K8s cluster).
+        </p>`;
 }
 
 document.getElementById('icap-configure-form').addEventListener('submit', async (e) => {
@@ -973,4 +1034,358 @@ function formatChatContent(text) {
         .replace(/\n/g, '<br>');
 }
 
+// =============================================================================
+// Policy Engine Tab
+// =============================================================================
+
+async function loadPENamespaces() {
+    const el = document.getElementById('pe-namespaces-panel');
+    try {
+        const res = await fetch(`${API_BASE}/policy-engine/namespaces`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+            el.innerHTML = '<p style="opacity:0.5;text-align:center;padding:24px 0">No namespaces detected. Policy Engine may be offline.</p>';
+            return;
+        }
+        el.innerHTML = `
+            <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+                <thead>
+                    <tr style="border-bottom:1px solid var(--border);text-align:left">
+                        <th style="padding:6px 10px;opacity:0.6;font-weight:500">Namespace</th>
+                        <th style="padding:6px 10px;opacity:0.6;font-weight:500">Environment</th>
+                        <th style="padding:6px 10px;opacity:0.6;font-weight:500">Policy</th>
+                        <th style="padding:6px 10px;opacity:0.6;font-weight:500">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.map(ns => `
+                        <tr style="border-bottom:1px solid var(--border)">
+                            <td style="padding:8px 10px;font-family:monospace">${ns.namespace || ns.name || '-'}</td>
+                            <td style="padding:8px 10px"><span class="badge badge-${envBadgeClass(ns.environment)}">${ns.environment || 'unknown'}</span></td>
+                            <td style="padding:8px 10px;opacity:0.75">${ns.policy || ns.applied_policy || '-'}</td>
+                            <td style="padding:8px 10px">
+                                <button class="btn btn-secondary" style="padding:2px 10px;font-size:0.8rem"
+                                    onclick="quickApplyPolicy('${ns.namespace || ns.name || ''}')">Apply</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
+    }
+}
+
+function envBadgeClass(env) {
+    if (!env) return 'secondary';
+    const e = env.toLowerCase();
+    if (e.includes('prod')) return 'danger';
+    if (e.includes('stag')) return 'warning';
+    return 'success';
+}
+
+async function loadPEPolicies() {
+    const el = document.getElementById('pe-policies-panel');
+    try {
+        const res = await fetch(`${API_BASE}/policy-engine/policies`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+            el.innerHTML = '<p style="opacity:0.5;text-align:center;padding:24px 0">No policies found.</p>';
+            return;
+        }
+        el.innerHTML = data.map(p => `
+            <div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+                <div style="font-weight:600;margin-bottom:2px">${p.name || p.id || '-'}</div>
+                <div style="font-size:0.82rem;opacity:0.65">${p.description || p.type || ''}</div>
+                ${p.compliance_frameworks ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
+                    ${p.compliance_frameworks.map(f => `<span style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:2px 8px;font-size:0.75rem">${f}</span>`).join('')}
+                </div>` : ''}
+            </div>`).join('');
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
+    }
+}
+
+async function loadPEFrameworks() {
+    const el = document.getElementById('pe-frameworks-panel');
+    try {
+        const res = await fetch(`${API_BASE}/policy-engine/compliance/frameworks`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+            el.innerHTML = '<p style="opacity:0.5;padding:12px">No frameworks found.</p>';
+            return;
+        }
+        el.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">
+            ${data.map(f => {
+                const name = typeof f === 'string' ? f : (f.name || f.id || JSON.stringify(f));
+                const desc = typeof f === 'object' ? (f.description || '') : '';
+                return `<div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:140px">
+                    <div style="font-weight:600;font-size:0.9rem">${name}</div>
+                    ${desc ? `<div style="font-size:0.78rem;opacity:0.6;margin-top:4px">${desc}</div>` : ''}
+                </div>`;
+            }).join('')}
+        </div>`;
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
+    }
+}
+
+async function applyPEPolicy() {
+    const ns = document.getElementById('pe-apply-ns').value.trim();
+    const strategy = document.getElementById('pe-apply-strategy').value;
+    const el = document.getElementById('pe-apply-result');
+    if (!ns) { el.innerHTML = '<p style="color:var(--danger)">Please enter a namespace.</p>'; return; }
+    el.innerHTML = '<p style="opacity:0.5">Applying...</p>';
+    try {
+        const res = await fetch(`${API_BASE}/policy-engine/namespaces/${encodeURIComponent(ns)}/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ strategy }),
+        });
+        const data = await res.json();
+        const ok = res.ok && !data.error;
+        el.innerHTML = `<div style="padding:12px;border-radius:8px;background:${ok ? 'var(--bg-secondary)' : '#f8d7da'};color:${ok ? 'inherit' : '#721c24'};font-size:0.88rem">
+            ${ok ? 'Policy applied successfully.' : (data.error || data.detail || JSON.stringify(data))}
+            ${data.policy ? `<br><strong>Policy:</strong> ${data.policy}` : ''}
+            ${data.environment ? `<br><strong>Environment:</strong> ${data.environment}` : ''}
+        </div>`;
+        if (ok) loadPENamespaces();
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+    }
+}
+
+function quickApplyPolicy(ns) {
+    document.getElementById('pe-apply-ns').value = ns;
+    document.getElementById('pe-apply-ns').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// =============================================================================
+// Load Balancer Tab
+// =============================================================================
+
+async function loadLBState() {
+    const el = document.getElementById('lb-state-panel');
+    try {
+        const [stateRes, healthRes] = await Promise.all([
+            fetch(`${API_BASE}/ssdlb/state`),
+            fetch(`${API_BASE}/icap/health`),
+        ]);
+        const d = await stateRes.json();
+        if (d.error) {
+            el.innerHTML = `<p style="color:var(--danger);padding:12px">SLDB offline: ${d.error}</p>`;
+            return;
+        }
+        const health = healthRes.ok ? await healthRes.json() : {};
+        const instances = health.instances ?? {};
+
+        const modeColor = d.mode === 'spread' ? '#667eea' : '#10b981';
+        const secs = d.last_switch_ts ? Math.floor(Date.now() / 1000 - d.last_switch_ts) : null;
+        const cooldown = secs !== null && secs < 60;
+
+        const instRows = ['a','b','c'].map(v => {
+            const inst  = instances[v] ?? {};
+            const score = inst.health_score ?? '—';
+            const ready = inst.ready;
+            const isActive = d.mode === 'spread' || d.last_selected === v;
+            const scoreNum = typeof score === 'number' ? score : 0;
+            const barColor = scoreNum >= 80 ? '#10b981' : scoreNum >= 60 ? '#f59e0b' : '#ef4444';
+            return `
+                <div style="padding:10px 14px;border-radius:8px;background:var(--bg-secondary);border:2px solid ${isActive ? modeColor : 'transparent'}">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                        <span style="font-weight:700">Instance ${v.toUpperCase()}</span>
+                        ${isActive ? `<span style="background:${modeColor};color:#fff;font-size:0.72rem;padding:1px 8px;border-radius:10px">ACTIVE</span>` : ''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <div style="flex:1;height:6px;background:var(--border-color,#e5e7eb);border-radius:3px;overflow:hidden">
+                            <div style="height:100%;width:${scoreNum}%;background:${barColor}"></div>
+                        </div>
+                        <span style="font-weight:600;color:${barColor};font-size:0.88rem">${score}</span>
+                    </div>
+                    ${ready !== undefined ? `<div style="font-size:0.72rem;margin-top:4px;color:${ready?'#10b981':'#ef4444'}">${ready?'● ready':'● not ready'}</div>` : ''}
+                </div>`;
+        }).join('');
+
+        el.innerHTML = `
+            <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+                <div style="flex:1;text-align:center;padding:14px;background:var(--bg-secondary);border-radius:8px">
+                    <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Mode</div>
+                    <div style="font-size:1.5rem;font-weight:800;color:${modeColor};text-transform:uppercase">${d.mode || '—'}</div>
+                </div>
+                <div style="flex:1;text-align:center;padding:14px;background:var(--bg-secondary);border-radius:8px">
+                    <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Last switch</div>
+                    <div style="font-size:1rem;font-weight:600">${secs !== null ? `${secs}s ago` : '—'}</div>
+                </div>
+                <div style="flex:1;text-align:center;padding:14px;background:var(--bg-secondary);border-radius:8px">
+                    <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Cooldown</div>
+                    <div style="font-size:1rem;font-weight:600;color:${cooldown?'#f59e0b':'#10b981'}">
+                        ${cooldown ? `${60 - secs}s left` : 'Clear'}
+                    </div>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${instRows}</div>`;
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
+    }
+}
+
+async function loadLBTrend() {
+    const el = document.getElementById('lb-trend-panel');
+    try {
+        const res = await fetch(`${API_BASE}/ssdlb/trend`);
+        const d   = await res.json();
+        if (d.error && !d.mode) {
+            el.innerHTML = `<p style="color:var(--danger);padding:12px">SLDB offline: ${d.error}</p>`;
+            return;
+        }
+
+        // Note shown when Prometheus is unavailable
+        const note = d._note ? `<p style="font-size:0.78rem;color:var(--text-secondary,#9ca3af);margin-bottom:12px;font-style:italic">ℹ ${d._note}</p>` : '';
+
+        // If we have Prometheus trend data, show growth metrics prominently
+        const hasGrowth = d.short_window_rate !== undefined || d.growth_ratio !== undefined;
+        if (hasGrowth) {
+            const short  = (d.short_window_rate  ?? 0).toFixed(2);
+            const medium = (d.medium_window_rate ?? 0).toFixed(2);
+            const growth = d.growth_ratio !== undefined ? (d.growth_ratio * 100).toFixed(1) : '—';
+            const growthColor = Math.abs(parseFloat(growth)) >= 8 ? '#ef4444'
+                : Math.abs(parseFloat(growth)) >= 3 ? '#f59e0b' : '#10b981';
+            el.innerHTML = `${note}
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+                    <div style="text-align:center;padding:12px;background:var(--bg-secondary);border-radius:8px">
+                        <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px">SHORT (1m) req/s</div>
+                        <div style="font-size:1.2rem;font-weight:700">${short}</div>
+                    </div>
+                    <div style="text-align:center;padding:12px;background:var(--bg-secondary);border-radius:8px">
+                        <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px">MEDIUM (5m) req/s</div>
+                        <div style="font-size:1.2rem;font-weight:700">${medium}</div>
+                    </div>
+                    <div style="text-align:center;padding:12px;background:var(--bg-secondary);border-radius:8px">
+                        <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px">GROWTH</div>
+                        <div style="font-size:1.2rem;font-weight:700;color:${growthColor}">${growth}%</div>
+                    </div>
+                </div>`;
+        } else {
+            // Fallback: show routing state key/values
+            const entries = Object.entries(d).filter(([k]) => !k.startsWith('_') && !k.includes('error'));
+            if (entries.length === 0) {
+                el.innerHTML = `${note}<p style="opacity:0.5;text-align:center;padding:24px 0">No traffic data yet — Prometheus integration not available.</p>`;
+                return;
+            }
+            const rows = entries.map(([k, v]) => {
+                const label = k.replace(/_/g, ' ');
+                const val = typeof v === 'number' ? (Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(1)) : String(v);
+                return `<tr style="border-bottom:1px solid var(--border-color,#e5e7eb)">
+                    <td style="padding:7px 10px;opacity:0.65;font-size:0.83rem;text-transform:capitalize">${label}</td>
+                    <td style="padding:7px 10px;font-family:monospace;font-size:0.88rem">${val}</td>
+                </tr>`;
+            }).join('');
+            el.innerHTML = `${note}<table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>`;
+        }
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
+    }
+}
+
+async function lbSetVersion(version) {
+    const el = document.getElementById('lb-override-result');
+    el.innerHTML = '<p style="opacity:0.5">Sending...</p>';
+    try {
+        const res = await fetch(`${API_BASE}/ssdlb/set-version/${version}`, { method: 'POST' });
+        const d = await res.json();
+        const ok = !d.error;
+        el.innerHTML = `<div style="padding:10px 14px;border-radius:8px;background:var(--bg-secondary);font-size:0.88rem">
+            ${ok
+                ? `Routed to <strong>${version.toUpperCase()}</strong>. ${d.message || ''}`
+                : `<span style="color:var(--danger)">Error: ${d.error}</span>`}
+        </div>`;
+        if (ok) { loadLBState(); }
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+    }
+}
+
+async function lbAutoRoute() {
+    const el = document.getElementById('lb-override-result');
+    const dec = document.getElementById('lb-decision-panel');
+    el.innerHTML = '<p style="opacity:0.5">Running auto-route decision...</p>';
+    try {
+        const res = await fetch(`${API_BASE}/ssdlb/auto-route`, { method: 'POST' });
+        const d = await res.json();
+        el.innerHTML = '';
+        if (d.error) {
+            dec.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${d.error}</p>`;
+            return;
+        }
+        const decisionColor = d.decision === 'no_change' ? 'var(--text-primary)' :
+                              (d.decision === 'force_spread' || d.decision === 'enter_spread') ? 'var(--accent)' : 'var(--success,#28a745)';
+        dec.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                <div style="font-size:1.4rem;font-weight:700;color:${decisionColor};text-transform:uppercase">${d.decision || '-'}</div>
+                ${d.selected_version ? `<span style="background:var(--accent);color:#fff;border-radius:6px;padding:2px 10px;font-size:0.88rem">Instance ${d.selected_version.toUpperCase()}</span>` : ''}
+            </div>
+            <table style="width:100%;border-collapse:collapse;font-size:0.87rem">
+                <tbody>
+                    ${Object.entries(d).filter(([k]) => !['decision','selected_version'].includes(k)).map(([k,v]) =>
+                        `<tr style="border-bottom:1px solid var(--border)">
+                            <td style="padding:6px 10px;opacity:0.65">${k}</td>
+                            <td style="padding:6px 10px;font-family:monospace">${typeof v === 'object' ? JSON.stringify(v) : String(v)}</td>
+                        </tr>`).join('')}
+                </tbody>
+            </table>`;
+        loadLBState();
+        loadLBTrend();
+    } catch (e) {
+        el.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+    }
+}
+
 loadData();
+loadSystemStatus();
+loadICAPHealthStat();
+
+// ── System status (header component badges) ────────────────────────────────
+async function loadSystemStatus() {
+    const el = document.getElementById('system-status');
+    if (!el) return;
+    try {
+        const res  = await fetch(`${API_BASE}/system/status`);
+        const data = await res.json();
+
+        const order = [
+            { key: 'meds',          label: 'MEDS' },
+            { key: 'policy_engine', label: 'Policy Engine' },
+            { key: 'icap_operator', label: 'ICAP Operator' },
+            { key: 'ssdlb',         label: 'SLDB' },
+        ];
+
+        el.innerHTML = order.map(c => {
+            const comp   = data[c.key] || {};
+            const online = comp.status === 'ok';
+            const cls    = online ? 'online' : comp.status === 'offline' ? 'offline' : '';
+            return `
+                <div class="component-badge ${cls}" title="${comp.description || ''}">
+                    <span class="component-dot ${cls}"></span>
+                    <span>${c.label}</span>
+                </div>`;
+        }).join('');
+    } catch (e) {
+        console.warn('system status unavailable:', e);
+    }
+}
+
+// ── ICAP health stat in KPI strip ─────────────────────────────────────────
+async function loadICAPHealthStat() {
+    try {
+        const res   = await fetch(`${API_BASE}/icap/health`);
+        const data  = await res.json();
+        const score = data.aggregate_health_score ?? 0;
+        const el    = document.getElementById('icap-health-stat');
+        const card  = document.getElementById('icap-health-card');
+        if (el) el.textContent = score;
+        if (card) {
+            card.classList.remove('success', 'warning', 'danger');
+            card.classList.add(score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger');
+        }
+    } catch (_) {}
+}
