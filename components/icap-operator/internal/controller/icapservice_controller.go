@@ -123,11 +123,26 @@ func (r *ICAPServiceReconciler) reconcileDeployment(ctx context.Context, icapSer
 					Containers: []corev1.Container{
 						{
 							Name:  "c-icap",
-							Image: "nginx:alpine",
+							Image: "micts/c-icap:latest",
 							Ports: []corev1.ContainerPort{
 								{
 									ContainerPort: 1344,
 									Name:          "icap",
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "ICAP_SERVER_NAME",
+									Value: icapService.Name,
+								},
+								{
+									Name:  "CLAMD_HOST",
+									Value: "localhost",
+								},
+								{
+									Name:  "CLAMD_PORT",
+									Value: "3310",
 								},
 							},
 						},
@@ -245,7 +260,42 @@ func (r *ICAPServiceReconciler) updateStatus(ctx context.Context, icapService *s
 	// Update status
 	icapService.Status.ReadyReplicas = deployment.Status.ReadyReplicas
 	icapService.Status.CurrentHealthScore = healthScore
-	icapService.Status.LastScalingTime = time.Now().Format(time.RFC3339)
+
+	// Health-score-driven replica scaling
+	desiredReplicas := icapService.Spec.Replicas
+	if healthScore < 50 {
+		// Critical: scale up to handle degraded instances
+		desiredReplicas = icapService.Spec.Replicas + 2
+		if desiredReplicas > 10 {
+			desiredReplicas = 10
+		}
+	} else if healthScore < 70 {
+		// Warning: scale up by one
+		desiredReplicas = icapService.Spec.Replicas + 1
+		if desiredReplicas > 10 {
+			desiredReplicas = 10
+		}
+	}
+
+	if desiredReplicas != icapService.Spec.Replicas {
+		logger.Info("Health-score scaling triggered",
+			"healthScore", healthScore,
+			"currentReplicas", icapService.Spec.Replicas,
+			"desiredReplicas", desiredReplicas,
+		)
+		// Update deployment replicas
+		foundDeploy := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Name:      icapService.Name + "-deployment",
+			Namespace: icapService.Namespace,
+		}, foundDeploy); err == nil {
+			foundDeploy.Spec.Replicas = &desiredReplicas
+			if err := r.Update(ctx, foundDeploy); err != nil {
+				logger.Error(err, "Failed to scale deployment for health", "desiredReplicas", desiredReplicas)
+			}
+		}
+		icapService.Status.LastScalingTime = time.Now().Format(time.RFC3339)
+	}
 
 	// Add condition
 	condition := securityv1alpha1.Condition{

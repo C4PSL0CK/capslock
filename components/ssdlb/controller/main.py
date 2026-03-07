@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Dict, Any
 import subprocess
 import os
 import requests
@@ -30,6 +32,33 @@ def log_event(event: str, **fields):
     }
     # Ensure it's always JSON even if some fields are non-serializable
     logger.info(json.dumps(payload, default=str))
+
+# In-memory service registry — replaced by dynamic registration
+_service_registry: Dict[str, Dict[str, Any]] = {
+    "a": {"version": "a", "registered_at": None, "healthy": True, "weight": 1},
+    "b": {"version": "b", "registered_at": None, "healthy": True, "weight": 1},
+    "c": {"version": "c", "registered_at": None, "healthy": True, "weight": 1},
+}
+
+# PCI-DSS v4.0 and CIS K8s Benchmark v1.9 routing event mappings
+_COMPLIANCE_EVENT_MAP = {
+    "predictive_spread_entered":  {"pci_dss": ["10.2.1", "10.3.1"], "cis": ["4.2.1"]},
+    "recovered_to_single":        {"pci_dss": ["10.2.1"],           "cis": ["4.1.1"]},
+    "icap_health_forced_spread":  {"pci_dss": ["10.6.1", "10.3.1"], "cis": ["4.2.1", "4.4.1"]},
+    "icap_health_penalty_applied":{"pci_dss": ["10.6.1"],           "cis": ["4.4.1"]},
+    "manual_set_version_applied": {"pci_dss": ["10.2.2"],           "cis": ["4.1.1"]},
+    "service_registered":         {"pci_dss": ["10.2.2"],           "cis": ["4.1.1"]},
+    "service_deregistered":       {"pci_dss": ["10.2.2", "10.3.1"], "cis": ["4.1.1"]},
+}
+
+def log_compliance_event(event: str, **fields):
+    """
+    Structured compliance-aware logging.
+    Emits the standard log_event AND appends PCI-DSS/CIS control references.
+    """
+    compliance = _COMPLIANCE_EVENT_MAP.get(event, {})
+    log_event(event, compliance_pci_dss=compliance.get("pci_dss", []),
+              compliance_cis=compliance.get("cis", []), **fields)
 
 PROMETHEUS_URL    = os.getenv("PROMETHEUS_URL",    "http://localhost:9090")
 POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
@@ -110,9 +139,46 @@ def get_state():
     return load_state()
 
 
+class ServiceRegistration(BaseModel):
+    version: str
+    healthy: bool = True
+    weight: int = 1  # 1-10, used for weighted routing
+
+
+@app.post("/register/{version}")
+def register_service(version: str, reg: ServiceRegistration):
+    """Register a new ICAP service version for dynamic routing."""
+    if len(version) > 32 or not version.replace("-", "").isalnum():
+        return {"error": "invalid version name"}
+    _service_registry[version] = {
+        "version": version,
+        "registered_at": datetime.now(timezone.utc).isoformat(),
+        "healthy": reg.healthy,
+        "weight": max(1, min(10, reg.weight)),
+    }
+    log_compliance_event("service_registered", version=version, weight=reg.weight)
+    return {"status": "registered", "version": version, "registry": _service_registry}
+
+
+@app.delete("/register/{version}")
+def deregister_service(version: str):
+    """Deregister an ICAP service version."""
+    if version not in _service_registry:
+        return {"error": "version not found"}
+    del _service_registry[version]
+    log_compliance_event("service_deregistered", version=version)
+    return {"status": "deregistered", "remaining": list(_service_registry.keys())}
+
+
+@app.get("/registry")
+def get_registry():
+    """List all registered ICAP service versions."""
+    return {"registry": _service_registry, "active_versions": list(_service_registry.keys())}
+
+
 @app.post("/set-version/{version}")
 def set_version(version: str):
-    if version not in ALLOWED_VERSIONS:
+    if version not in _service_registry:
         return {"error": "invalid version"}
 
     path = os.path.join(DR_DIR, f"dr-{version}.yaml")
@@ -131,7 +197,7 @@ def set_version(version: str):
         log_event("manual_set_version_failed", version=version, error=result.stderr)
         return {"error": result.stderr}
 
-    log_event("manual_set_version_applied", version=version)
+    log_compliance_event("manual_set_version_applied", version=version)
 
     # Update state (manual switch counts as a switch)
     state = load_state()
@@ -190,7 +256,7 @@ def get_request_rates():
         version = item["metric"].get("destination_version")
         value = float(item["value"][1])
 
-        if version in ALLOWED_VERSIONS:
+        if version in _service_registry:
             rates[version] = rates.get(version, 0) + value
 
     return rates
@@ -218,7 +284,7 @@ def get_health_weighted_rates() -> dict:
             # Penalise: treat the version as if it is 3× as loaded
             penalty = 3.0 * (ICAP_INSTANCE_HEALTHY_FLOOR - score) / ICAP_INSTANCE_HEALTHY_FLOOR
             weighted[ver] = rate * (1.0 + penalty)
-            log_event(
+            log_compliance_event(
                 "icap_health_penalty_applied",
                 version=ver,
                 health_score=score,
@@ -245,6 +311,49 @@ def get_total_rate(window: str):
         total += float(item["value"][1])
 
     return total
+
+
+def get_queue_depth() -> Dict[str, Any]:
+    """
+    Query Prometheus for ICAP request queue depth metrics.
+    Returns per-version queue depths and aggregate statistics.
+    """
+    try:
+        # Query for pending/queued requests (icap_queue_depth or http connection backlog)
+        queue_query = (
+            'icap_queue_depth{service="icap-service"}'
+        )
+        results = query_prometheus(queue_query)
+        depths = {}
+        for item in results:
+            ver = item["metric"].get("version", "unknown")
+            depths[ver] = float(item["value"][1])
+
+        if not depths:
+            # Fallback: infer queue depth from rate differential
+            short = get_total_rate("30s")
+            medium = get_total_rate("5m")
+            inferred_backlog = max(0.0, short - medium)
+            depths = {v: inferred_backlog / max(1, len(_service_registry)) for v in _service_registry}
+
+        total_depth = sum(depths.values())
+        max_ver = max(depths, key=depths.get) if depths else None
+
+        return {
+            "per_version": depths,
+            "total_queue_depth": round(total_depth, 4),
+            "max_queue_version": max_ver,
+            "high_queue_detected": total_depth > 10.0,
+        }
+    except Exception as e:
+        log_event("queue_depth_fetch_failed", error=str(e))
+        return {"per_version": {}, "total_queue_depth": 0.0, "max_queue_version": None, "high_queue_detected": False}
+
+
+@app.get("/queue-depth")
+def queue_depth_endpoint():
+    """Return current ICAP request queue depths from Prometheus."""
+    return get_queue_depth()
 
 
 def detect_rising_trend():
@@ -276,6 +385,115 @@ def trend_debug():
         "enter_threshold": TREND_ENTER_GROWTH_RATIO,
         "exit_threshold": TREND_EXIT_GROWTH_RATIO
     }
+
+
+@app.get("/generate-dr/{version}")
+def generate_destination_rule(version: str, weight: int = 100):
+    """Generate Istio DestinationRule YAML dynamically for a given version."""
+    if version not in _service_registry:
+        return {"error": "version not registered"}
+
+    if version == "spread":
+        # Equal-weight spread across all registered versions
+        registered = list(_service_registry.keys())
+        n = len(registered)
+        per_weight = 100 // n
+        remainder = 100 - (per_weight * n)
+        subsets = []
+        for i, v in enumerate(registered):
+            w = per_weight + (remainder if i == 0 else 0)
+            subsets.append(f"    - labels:\n        version: {v}\n      weight: {w}")
+        subsets_yaml = "\n".join(subsets)
+        yaml_content = f"""apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: icap-service-dr
+  namespace: default
+spec:
+  host: icap-service.default.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+  subsets:
+{chr(10).join(f'  - name: v{v}{chr(10)}    labels:{chr(10)}      version: {v}' for v in registered)}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: icap-service-vs
+  namespace: default
+spec:
+  hosts:
+  - icap-service.default.svc.cluster.local
+  http:
+  - route:
+{subsets_yaml}
+"""
+    else:
+        svc_weight = min(100, max(1, weight))
+        yaml_content = f"""apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: icap-service-dr
+  namespace: default
+spec:
+  host: icap-service.default.svc.cluster.local
+  subsets:
+  - name: v{version}
+    labels:
+      version: {version}
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: icap-service-vs
+  namespace: default
+spec:
+  hosts:
+  - icap-service.default.svc.cluster.local
+  http:
+  - route:
+    - destination:
+        host: icap-service.default.svc.cluster.local
+        subset: v{version}
+      weight: {svc_weight}
+"""
+
+    log_event("dr_generated", version=version, weight=weight)
+    return {"version": version, "yaml": yaml_content, "generated_at": datetime.now(timezone.utc).isoformat()}
+
+
+@app.post("/apply-dr/{version}")
+def apply_dynamic_dr(version: str, weight: int = 100):
+    """Generate and apply Istio DR dynamically (writes to temp file, then kubectl apply)."""
+    import tempfile
+    gen = generate_destination_rule(version, weight)
+    if "error" in gen:
+        return gen
+
+    yaml_content = gen["yaml"]
+    log_event("apply_dynamic_dr", version=version, yaml_length=len(yaml_content))
+
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_content)
+            tmp_path = f.name
+
+        result = subprocess.run(
+            ["kubectl", "apply", "-f", tmp_path],
+            capture_output=True, text=True
+        )
+        os.unlink(tmp_path)
+
+        if result.returncode != 0:
+            log_event("apply_dynamic_dr_failed", version=version, error=result.stderr)
+            return {"error": result.stderr, "yaml": yaml_content}
+
+        log_event("apply_dynamic_dr_success", version=version)
+        return {"status": "ok", "applied_version": version, "kubectl": result.stdout}
+    except Exception as e:
+        log_event("apply_dynamic_dr_error", version=version, error=str(e))
+        return {"error": str(e)}
 
 
 def apply_version(version: str):
@@ -356,7 +574,7 @@ def auto_route():
             state["last_switch_ts"] = now
             state["spread_since_ts"] = now
             save_state(state)
-            log_event(
+            log_compliance_event(
                 "icap_health_forced_spread",
                 aggregate_health_score=agg_score,
                 threshold=ICAP_HEALTH_SPREAD_THRESHOLD,
@@ -442,7 +660,7 @@ def auto_route():
         state["spread_since_ts"] = 0
         save_state(state)
 
-        log_event(
+        log_compliance_event(
             "recovered_to_single",
             selected=selected,
             rates=rates,
@@ -475,7 +693,7 @@ def auto_route():
         state["spread_since_ts"] = now
         save_state(state)
 
-        log_event(
+        log_compliance_event(
             "predictive_spread_entered",
             short_rate=short_rate,
             medium_rate=medium_rate,

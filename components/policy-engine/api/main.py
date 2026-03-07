@@ -430,6 +430,433 @@ async def list_compliance_frameworks():
     }
 
 # ============================================================================
+# Policy Synthesis — Pydantic Models
+# ============================================================================
+
+class PolicySynthesisRequest(BaseModel):
+    namespace: str
+    environment: str  # development | staging | production
+    frameworks: List[str] = ["cis", "pci-dss"]
+    engine: str = "opa"  # opa | kyverno
+
+class PolicySynthesisResponse(BaseModel):
+    namespace: str
+    environment: str
+    engine: str
+    manifests: List[dict]  # list of {"name": str, "kind": str, "yaml": str}
+    conflict_resolution: dict
+    confidence_score: float
+    generated_at: str
+
+# ============================================================================
+# Policy Synthesis — Helper Functions
+# ============================================================================
+
+_KNOWN_NAMESPACES = [
+    "default", "kube-system", "kube-public", "capslock-system",
+    "production", "staging", "development", "dev", "prod",
+    "monitoring", "logging", "ingress-nginx", "cert-manager",
+]
+
+_SUPPORTED_FRAMEWORKS = {"cis", "pci-dss"}
+
+_CONFLICT_RULES = [
+    {
+        "id": "allow-deny-conflict",
+        "description": "allow-* policy conflicts with deny-* policy for the same resource",
+        "pattern": "allow-{resource} vs deny-{resource}",
+        "resolution": "deny wins in production/staging; allow wins in development",
+    },
+    {
+        "id": "scan-mode-conflict",
+        "description": "Multiple scanning modes active simultaneously (log-only + block)",
+        "pattern": "log-only vs block scanning mode",
+        "resolution": "block mode wins in production; log-only wins in development",
+    },
+    {
+        "id": "required-remove-conflict",
+        "description": "required-policy and remove-policy reference the same policy name",
+        "pattern": "require-{name} vs remove-{name}",
+        "resolution": "required wins in all environments",
+    },
+    {
+        "id": "namespace-scope-conflict",
+        "description": "allow-all-namespaces conflicts with restrict-namespaces",
+        "pattern": "allow-all-namespaces vs restrict-namespaces",
+        "resolution": "restrict wins in production/staging; allow wins in development",
+    },
+]
+
+
+def _resolve_conflicts(policies: List[str], environment: str) -> dict:
+    """
+    Detect and resolve conflicts between a list of policy names for a given
+    environment tier.  Returns a structured dict describing what was found and
+    how it was resolved.
+    """
+    env = environment.lower()
+    conflicts: List[str] = []
+    resolved: List[str] = []
+    precedence_rule = ""
+    action = ""
+
+    # Build lookup sets for quick membership testing
+    policy_set = set(p.lower() for p in policies)
+
+    # --- Rule 1: allow-* vs deny-* for the same resource type ---
+    allow_policies = {p for p in policy_set if p.startswith("allow-")}
+    deny_policies  = {p for p in policy_set if p.startswith("deny-")}
+    for ap in allow_policies:
+        resource = ap[len("allow-"):]
+        dp = f"deny-{resource}"
+        if dp in deny_policies:
+            conflicts.append(f"Conflict: '{ap}' vs '{dp}'")
+            if env == "production":
+                resolved.append(dp)
+                precedence_rule = "production: deny/security policies take precedence"
+                action = f"Removed '{ap}'; keeping '{dp}'"
+            elif env == "staging":
+                resolved.append(dp)
+                precedence_rule = "staging: most-restrictive wins (warning logged)"
+                action = f"Removed '{ap}'; keeping '{dp}' (WARNING: conflicting policies detected)"
+            else:
+                resolved.append(ap)
+                precedence_rule = "development: permissive policies allowed; conflicts are warnings only"
+                action = f"Keeping '{ap}'; '{dp}' is a warning (development mode)"
+
+    # --- Rule 2: log-only + block scanning mode conflict ---
+    has_log_only = any("log-only" in p or "log_only" in p for p in policy_set)
+    has_block    = any("block" in p for p in policy_set)
+    if has_log_only and has_block:
+        conflicts.append("Conflict: 'log-only' scanning mode vs 'block' scanning mode")
+        if env == "production":
+            resolved.append("block")
+            precedence_rule = precedence_rule or "production: block mode takes precedence"
+            action = action or "Enforcing 'block' scanning mode; removed 'log-only'"
+        elif env == "staging":
+            resolved.append("block")
+            precedence_rule = precedence_rule or "staging: most-restrictive wins (warning logged)"
+            action = action or "Enforcing 'block' scanning mode (WARNING: conflicting scan modes)"
+        else:
+            resolved.append("log-only")
+            precedence_rule = precedence_rule or "development: permissive policies allowed; conflicts are warnings only"
+            action = action or "Keeping 'log-only' scan mode in development (warning only)"
+
+    # --- Rule 3: require-{name} + remove-{name} for the same policy name ---
+    require_policies = {p[len("require-"):] for p in policy_set if p.startswith("require-")}
+    remove_policies  = {p[len("remove-"):] for p in policy_set if p.startswith("remove-")}
+    for name in require_policies & remove_policies:
+        conflicts.append(f"Conflict: 'require-{name}' vs 'remove-{name}'")
+        resolved.append(f"require-{name}")
+        precedence_rule = precedence_rule or "all environments: required-policy takes precedence over remove-policy"
+        action = action or f"Keeping 'require-{name}'; discarding 'remove-{name}'"
+
+    # --- Rule 4: allow-all-namespaces vs restrict-namespaces ---
+    if "allow-all-namespaces" in policy_set and "restrict-namespaces" in policy_set:
+        conflicts.append("Conflict: 'allow-all-namespaces' vs 'restrict-namespaces'")
+        if env in ("production", "staging"):
+            resolved.append("restrict-namespaces")
+            precedence_rule = precedence_rule or f"{env}: security policies take precedence"
+            action = action or "Removed 'allow-all-namespaces'; keeping 'restrict-namespaces'"
+        else:
+            resolved.append("allow-all-namespaces")
+            precedence_rule = precedence_rule or "development: permissive policies allowed; conflicts are warnings only"
+            action = action or "Keeping 'allow-all-namespaces' (development mode; warning only)"
+
+    if not conflicts:
+        precedence_rule = "no conflicts detected"
+        action = "all policies applied as-is"
+
+    return {
+        "conflicts": conflicts,
+        "resolved": resolved,
+        "precedence_rule": precedence_rule,
+        "action": action,
+    }
+
+
+def _calculate_confidence(namespace: str, environment: str, frameworks: List[str]) -> float:
+    """
+    Score synthesis confidence from 0.0 to 1.0 using five weighted factors.
+
+    Factor 1 (0.30): namespace is in the known-namespaces list
+    Factor 2 (0.25): all requested frameworks are supported
+    Factor 3 (0.20): environment matches a known tier
+    Factor 4 (0.15): Go policy-engine binary is present
+    Factor 5 (0.10): Kubernetes cluster is reachable
+    """
+    # Factor 1 — namespace recognition
+    f1 = 1.0 if namespace.lower() in _KNOWN_NAMESPACES else 0.5
+
+    # Factor 2 — framework support
+    unknown_fws = [fw for fw in frameworks if fw.lower() not in _SUPPORTED_FRAMEWORKS]
+    f2 = 1.0 if not unknown_fws else 0.5
+
+    # Factor 3 — environment tier
+    f3 = 1.0 if environment.lower() in ("development", "dev", "staging", "production", "prod") else 0.5
+
+    # Factor 4 — policy-engine binary
+    binary_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "bin", "policy-engine")
+    # Also try the path relative to CWD (how the existing endpoints invoke it)
+    binary_cwd  = "./bin/policy-engine"
+    f4 = 1.0 if (os.path.isfile(binary_path) or os.path.isfile(binary_cwd)) else 0.7
+
+    # Factor 5 — Kubernetes connectivity
+    f5 = 1.0 if _ensure_k8s() else 0.8
+
+    score = (f1 * 0.30) + (f2 * 0.25) + (f3 * 0.20) + (f4 * 0.15) + (f5 * 0.10)
+    return round(score, 2)
+
+
+def _generate_opa_manifests(namespace: str, environment: str) -> List[dict]:
+    """Generate OPA Gatekeeper ConstraintTemplate + Constraint YAML manifests."""
+    env = environment.lower()
+    # Enforcement action: dryrun for dev, deny for staging/prod
+    enforcement = "dryrun" if env in ("development", "dev") else "deny"
+
+    # --- Manifest 1: ConstraintTemplate for required labels ---
+    ct_required_labels = f"""\
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels-{namespace}
+  namespace: {namespace}
+  labels:
+    environment: {environment}
+    managed-by: capslock-policy-engine
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            labels:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+        violation[{{"msg": msg}}] {{
+          provided := {{label | input.review.object.metadata.labels[label]}}
+          required := {{label | label := input.parameters.labels[_]}}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("Missing required labels: %v", [missing])
+        }}
+"""
+
+    # --- Manifest 2: Constraint that enforces k8srequiredlabels ---
+    constraint_required_labels = f"""\
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-labels-{namespace}
+  labels:
+    environment: {environment}
+    managed-by: capslock-policy-engine
+spec:
+  enforcementAction: {enforcement}
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - {namespace}
+  parameters:
+    labels:
+      - app
+      - environment
+"""
+
+    # --- Manifest 3: ConstraintTemplate for pod security standards ---
+    ct_pod_security = f"""\
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8spspprivilegedcontainer-{namespace}
+  namespace: {namespace}
+  labels:
+    environment: {environment}
+    managed-by: capslock-policy-engine
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sPSPPrivilegedContainer
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8spspprivilegedcontainer
+        violation[{{"msg": msg}}] {{
+          c := input_containers[_]
+          c.securityContext.privileged
+          msg := sprintf("Privileged container is not allowed: %v", [c.name])
+        }}
+        input_containers[c] {{
+          c := input.review.object.spec.containers[_]
+        }}
+        input_containers[c] {{
+          c := input.review.object.spec.initContainers[_]
+        }}
+"""
+
+    return [
+        {
+            "name": f"k8srequiredlabels-{namespace}",
+            "kind": "ConstraintTemplate",
+            "yaml": ct_required_labels,
+        },
+        {
+            "name": f"require-labels-{namespace}",
+            "kind": "K8sRequiredLabels (Constraint)",
+            "yaml": constraint_required_labels,
+        },
+        {
+            "name": f"k8spspprivilegedcontainer-{namespace}",
+            "kind": "ConstraintTemplate",
+            "yaml": ct_pod_security,
+        },
+    ]
+
+
+def _generate_kyverno_manifests(namespace: str, environment: str) -> List[dict]:
+    """Generate Kyverno ClusterPolicy YAML manifests."""
+    env = environment.lower()
+    # enforce for prod/staging; audit for dev
+    action = "Audit" if env in ("development", "dev") else "Enforce"
+
+    # --- Manifest 1: ClusterPolicy for required label validation ---
+    cp_labels = f"""\
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-labels-{namespace}
+  labels:
+    environment: {environment}
+    managed-by: capslock-policy-engine
+  annotations:
+    policies.kyverno.io/title: Require Labels
+    policies.kyverno.io/description: >-
+      Require that all Pods carry 'app' and 'environment' labels.
+spec:
+  validationFailureAction: {action}
+  background: true
+  rules:
+    - name: check-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - {namespace}
+      validate:
+        message: "Required labels 'app' and 'environment' are missing."
+        pattern:
+          metadata:
+            labels:
+              app: "?*"
+              environment: "?*"
+"""
+
+    # --- Manifest 2: ClusterPolicy for pod security standards ---
+    cp_pod_security = f"""\
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-privileged-containers-{namespace}
+  labels:
+    environment: {environment}
+    managed-by: capslock-policy-engine
+  annotations:
+    policies.kyverno.io/title: Disallow Privileged Containers
+    policies.kyverno.io/description: >-
+      Privileged containers are disallowed. This policy ensures Pods do not
+      run privileged containers in the {namespace} namespace.
+spec:
+  validationFailureAction: {action}
+  background: true
+  rules:
+    - name: disallow-privileged
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - {namespace}
+      validate:
+        message: "Privileged containers are not allowed."
+        pattern:
+          spec:
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+"""
+
+    return [
+        {
+            "name": f"require-labels-{namespace}",
+            "kind": "ClusterPolicy",
+            "yaml": cp_labels,
+        },
+        {
+            "name": f"disallow-privileged-containers-{namespace}",
+            "kind": "ClusterPolicy",
+            "yaml": cp_pod_security,
+        },
+    ]
+
+
+# ============================================================================
+# Policy Synthesis — Endpoints
+# ============================================================================
+
+@app.post("/api/policies/synthesize", response_model=PolicySynthesisResponse)
+async def synthesize_policies(req: PolicySynthesisRequest):
+    """
+    Generate OPA Gatekeeper or Kyverno policy manifests for a namespace/environment.
+    Runs conflict resolution and returns a confidence score alongside the YAMLs.
+    """
+    engine = req.engine.lower()
+    if engine not in ("opa", "kyverno"):
+        raise HTTPException(status_code=400, detail="engine must be 'opa' or 'kyverno'")
+
+    if engine == "opa":
+        manifests = _generate_opa_manifests(req.namespace, req.environment)
+    else:
+        manifests = _generate_kyverno_manifests(req.namespace, req.environment)
+
+    policy_names = [m["name"] for m in manifests]
+    conflict_resolution = _resolve_conflicts(policy_names, req.environment)
+    confidence_score    = _calculate_confidence(req.namespace, req.environment, req.frameworks)
+
+    return PolicySynthesisResponse(
+        namespace=req.namespace,
+        environment=req.environment,
+        engine=engine,
+        manifests=manifests,
+        conflict_resolution=conflict_resolution,
+        confidence_score=confidence_score,
+        generated_at=datetime.utcnow().isoformat(),
+    )
+
+
+@app.get("/api/policies/conflicts")
+async def list_conflict_rules():
+    """
+    Return the catalogue of known conflict-detection rules used by
+    _resolve_conflicts().  Useful for UI documentation and debugging.
+    """
+    return {"rules": _CONFLICT_RULES}
+
+
+# ============================================================================
 # ICAP Operator Bridge  (reads/writes the ICAPService CRD via the K8s API)
 # Falls back to a local state file so configuration persists without a cluster.
 # ============================================================================

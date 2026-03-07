@@ -39,20 +39,24 @@ app.add_middleware(
 )
 
 promotions_db: Dict[str, Promotion] = {}
+pending_approvals_db: Dict[str, str] = {}  # promotion_id → promotion_id (set of pending)
 environments_db: Dict[str, Environment] = {}
 
 # Initialize environments
 environments_db["development"] = Environment(
     name="development", type="development", max_risk_score=80,
-    policies=get_policies_for_environment("development")
+    policies=get_policies_for_environment("development"),
+    cluster="dev-cluster", policy_mode="enforce", approval_threshold=0.75,
 )
 environments_db["staging"] = Environment(
     name="staging", type="staging", max_risk_score=60,
-    policies=get_policies_for_environment("staging")
+    policies=get_policies_for_environment("staging"),
+    cluster="staging-cluster", policy_mode="audit", approval_threshold=0.75,
 )
 environments_db["production"] = Environment(
     name="production", type="production", max_risk_score=40,
-    policies=get_policies_for_environment("production")
+    policies=get_policies_for_environment("production"),
+    cluster="prod-cluster", policy_mode="enforce", approval_threshold=0.75,
 )
 
 # Set environment thresholds in metrics
@@ -149,62 +153,62 @@ async def system_status():
 
 _DEMO_PROMOTIONS = [
     {
-        "name": "payment-service-v2.1.0",
+        "name": "payment-service-v2.3.1",
         "application_name": "payment-service",
+        "application_namespace": "payments",
         "source_environment": "development",
         "target_environment": "staging",
-        "version": "v2.1.0",
-        "application_namespace": "payments",
+        "version": "v2.3.1",
         "add_policies": [],
         "remove_policies": [],
     },
     {
         "name": "auth-service-v1.5.2",
         "application_name": "auth-service",
+        "application_namespace": "auth",
         "source_environment": "staging",
         "target_environment": "production",
         "version": "v1.5.2",
-        "application_namespace": "auth",
         "add_policies": [],
         "remove_policies": [],
     },
     {
-        "name": "data-pipeline-v3.0.0-alpha",
-        "application_name": "data-pipeline",
-        "source_environment": "development",
-        "target_environment": "staging",
-        "version": "v3.0.0-alpha",
-        "application_namespace": "analytics",
-        "add_policies": [],
-        "remove_policies": [],
-    },
-    {
-        "name": "api-gateway-v1.0.0",
+        "name": "api-gateway-v2.0.0",
         "application_name": "api-gateway",
+        "application_namespace": "platform",
         "source_environment": "development",
         "target_environment": "staging",
-        "version": "v1.0.0",
-        "application_namespace": "platform",
+        "version": "v2.0.0",
+        "add_policies": ["network-policy", "resource-limits"],
+        "remove_policies": [],
+    },
+    {
+        "name": "data-pipeline-v1.4.0",
+        "application_name": "data-pipeline",
+        "application_namespace": "analytics",
+        "source_environment": "staging",
+        "target_environment": "production",
+        "version": "v1.4.0",
         "add_policies": [],
         "remove_policies": [],
     },
     {
-        "name": "ml-inference-v2.0.0-beta",
+        "name": "ml-inference-v3.0.0-alpha",
         "application_name": "ml-inference",
-        "source_environment": "development",
-        "target_environment": "production",
-        "version": "v2.0.0-beta",
         "application_namespace": "mlops",
+        "source_environment": "staging",
+        "target_environment": "production",
+        "version": "v3.0.0-alpha",
         "add_policies": [],
         "remove_policies": [],
     },
     {
         "name": "notification-svc-v1.2.3",
         "application_name": "notification-svc",
-        "source_environment": "staging",
-        "target_environment": "production",
-        "version": "v1.2.3",
         "application_namespace": "messaging",
+        "source_environment": "development",
+        "target_environment": "staging",
+        "version": "v1.2.3",
         "add_policies": [],
         "remove_policies": [],
     },
@@ -220,7 +224,6 @@ async def seed_demo_data():
     for demo in _DEMO_PROMOTIONS:
         try:
             promotion_id = str(uuid.uuid4())[:8]
-            from meds.models.promotion import ApplicationRef, PolicyMigration, PromotionSpec
             promotion = Promotion(
                 metadata={"name": demo["name"], "id": promotion_id},
                 spec=PromotionSpec(
@@ -243,6 +246,8 @@ async def seed_demo_data():
                 environments_db[demo["target_environment"]],
             )
             promotions_db[promotion_id] = promotion
+            if promotion.status.decision == "PENDING_APPROVAL":
+                pending_approvals_db[promotion_id] = promotion_id
         except Exception as exc:
             logger.warning("seed_promotion_failed", name=demo["name"], error=str(exc))
     save_promotions(promotions_db)
@@ -315,6 +320,8 @@ async def create_promotion(request: CreatePromotionRequest):
     policy_eval_duration = time.time() - policy_eval_start
 
     promotions_db[promotion_id] = promotion
+    if promotion.status.decision == "PENDING_APPROVAL":
+        pending_approvals_db[promotion_id] = promotion_id
     save_promotions(promotions_db)
 
     # Record metrics (risk_assessment is None when ICAP rejects)
@@ -355,15 +362,19 @@ async def get_promotions():
     start_time = time.time()
     result = [
         {
-            "id": p.metadata["id"],
-            "name": p.metadata["name"],
-            "application": p.spec.application.name,
-            "source": p.spec.source_environment,
-            "target": p.spec.target_environment,
-            "version": p.spec.version,
-            "decision": p.status.decision,
-            "risk_score": p.status.risk_score,
-            "phase": p.status.phase
+            "id":           p.metadata["id"],
+            "name":         p.metadata["name"],
+            "application":  p.spec.application.name,
+            "source":       p.spec.source_environment,
+            "target":       p.spec.target_environment,
+            "version":      p.spec.version,
+            "decision":     p.status.decision,
+            "risk_score":   p.status.risk_score,
+            "phase":        p.status.phase,
+            "policy_mode":  p.status.policy_mode,
+            "cluster":      environments_db.get(p.spec.target_environment, Environment(name="", type="", max_risk_score=0, policies=[])).cluster,
+            "gitops":       p.status.gitops.model_dump() if p.status.gitops else None,
+            "approval_required": p.status.approval_required,
         }
         for p in promotions_db.values()
     ]
@@ -418,6 +429,126 @@ async def rollback_environment(name: str, body: RollbackRequest):
         return rolled_back.model_dump()
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+
+@app.get("/api/approvals")
+async def list_pending_approvals():
+    """List all promotions awaiting human approval."""
+    pending = []
+    for pid in list(pending_approvals_db.keys()):
+        p = promotions_db.get(pid)
+        if p and p.status.decision == "PENDING_APPROVAL":
+            pending.append({
+                "id":          p.metadata["id"],
+                "name":        p.metadata["name"],
+                "application": p.spec.application.name,
+                "source":      p.spec.source_environment,
+                "target":      p.spec.target_environment,
+                "version":     p.spec.version,
+                "risk_score":  p.status.risk_score,
+                "message":     p.status.message,
+            })
+    return pending
+
+
+@app.post("/api/approvals/{promotion_id}/approve")
+async def approve_promotion(promotion_id: str, body: dict = {}):
+    """Human approves a PENDING_APPROVAL promotion — triggers GitOps deploy."""
+    p = promotions_db.get(promotion_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Promotion not found")
+    if p.status.decision != "PENDING_APPROVAL":
+        raise HTTPException(status_code=400, detail=f"Promotion is not pending approval (current: {p.status.decision})")
+    approved_by = body.get("approved_by", "operator")
+    target_env  = environments_db.get(p.spec.target_environment)
+    if not target_env:
+        raise HTTPException(status_code=400, detail="Target environment not found")
+    gitops_result = controller.complete_approval(p, target_env, approved_by=approved_by)
+    pending_approvals_db.pop(promotion_id, None)
+    save_promotions(promotions_db)
+    return {"status": "approved", "promotion_id": promotion_id, "gitops": gitops_result}
+
+
+@app.post("/api/approvals/{promotion_id}/reject")
+async def reject_promotion(promotion_id: str, body: dict = {}):
+    """Human rejects a PENDING_APPROVAL promotion."""
+    p = promotions_db.get(promotion_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Promotion not found")
+    if p.status.decision != "PENDING_APPROVAL":
+        raise HTTPException(status_code=400, detail=f"Promotion is not pending approval (current: {p.status.decision})")
+    reason = body.get("reason", "Rejected by operator")
+    p.status.phase    = "FAILED"
+    p.status.decision = "REJECTED"
+    p.status.message  = f"REJECTED — {reason}"
+    pending_approvals_db.pop(promotion_id, None)
+    audit_logger.log(
+        "promotion_rejected",
+        details={"reason": reason, "rejected_by": body.get("approved_by", "operator")},
+        promotion_id=promotion_id,
+        environment=p.spec.target_environment,
+        actor=body.get("approved_by", "operator"),
+    )
+    save_promotions(promotions_db)
+    return {"status": "rejected", "promotion_id": promotion_id}
+
+
+@app.post("/api/promotions/{promotion_id}/rollback")
+async def trigger_rollback(promotion_id: str, body: dict = {}):
+    """Trigger an automated rollback for a promotion (SLO violation or manual)."""
+    p = promotions_db.get(promotion_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Promotion not found")
+    version_id = body.get("version_id") or p.status.rollback_version_id
+    if not version_id:
+        raise HTTPException(status_code=400, detail="No rollback version available")
+    target_env = environments_db.get(p.spec.target_environment)
+    if not target_env:
+        raise HTTPException(status_code=400, detail="Target environment not found")
+    reason = body.get("reason", "manual")
+    actor  = body.get("actor", "operator")
+    result = controller.execute_rollback(p, target_env, version_id, reason=reason, actor=actor)
+    # Also revert the policy version in the store
+    try:
+        version_store.rollback(p.spec.target_environment, version_id, environments_db)
+        audit_logger.log(
+            "policy_rollback",
+            details={"version_id": version_id, "reason": reason},
+            environment=p.spec.target_environment,
+            actor=actor,
+        )
+    except ValueError:
+        pass
+    save_promotions(promotions_db)
+    return {"status": "rolled_back", "promotion_id": promotion_id, "gitops": result}
+
+
+@app.get("/api/clusters")
+async def get_clusters():
+    """Return logical cluster status for each environment."""
+    clusters = {}
+    for env in environments_db.values():
+        c = env.cluster
+        if c not in clusters:
+            clusters[c] = {
+                "cluster":      c,
+                "environments": [],
+                "promotions":   0,
+                "status":       "healthy",
+            }
+        clusters[c]["environments"].append(env.name)
+        clusters[c]["promotions"] += sum(
+            1 for p in promotions_db.values()
+            if p.spec.target_environment == env.name and p.status.decision == "APPROVED"
+        )
+    return list(clusters.values())
+
+
+@app.get("/api/audit/verify")
+async def verify_audit_chain():
+    """Verify the SHA-256 hash chain integrity of the immutable audit log."""
+    return audit_logger.verify_chain()
 
 
 @app.get("/api/icap/status")
@@ -482,12 +613,14 @@ async def demo_risk_score(body: Dict[str, Any]):
     add_policies    = ["p"] * int(body.get("add_policies", 0))
     remove_policies = ["p"] * int(body.get("remove_policies", 0))
     return scorer.calculate_risk_score(
-        version=body.get("version", "v1.0.0"),
-        source_environment=body.get("source_env", "development"),
-        target_environment=body.get("target_env", "staging"),
-        add_policies=add_policies,
-        remove_policies=remove_policies,
-        max_allowed_score=int(body.get("max_allowed_score", 60)),
+        version             = body.get("version", "v1.0.0"),
+        source_environment  = body.get("source_env", "development"),
+        target_environment  = body.get("target_env", "staging"),
+        add_policies        = add_policies,
+        remove_policies     = remove_policies,
+        max_allowed_score   = int(body.get("max_allowed_score", 60)),
+        icap_coverage_score = body.get("icap_coverage_score"),
+        compliance_score    = body.get("compliance_score"),
     )
 
 
