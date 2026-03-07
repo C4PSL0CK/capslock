@@ -7,6 +7,8 @@ import uuid
 import time
 import os
 import json
+import asyncio
+from contextlib import asynccontextmanager
 import httpx
 
 from pydantic import BaseModel
@@ -24,11 +26,80 @@ from prometheus_client import CONTENT_TYPE_LATEST
 POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
 SSDLB_URL = os.getenv("SSDLB_URL", "http://localhost:8082").rstrip("/")
 
+# TLS configuration for inter-component calls
+CA_CERT_PATH   = os.getenv("CA_CERT_PATH", "")
+MTLS_CERT_PATH = os.getenv("MTLS_CERT_PATH", "")
+MTLS_KEY_PATH  = os.getenv("MTLS_KEY_PATH", "")
+
 # Setup logging
 setup_logging()
 logger = get_logger("meds.api")
 
-app = FastAPI(title="MEDS API", version="1.0.0")
+
+def _get_http_client(timeout: float = 5.0) -> httpx.AsyncClient:
+    """Return an httpx AsyncClient with optional mTLS configuration."""
+    kwargs: dict = {"timeout": timeout}
+    if CA_CERT_PATH:
+        kwargs["verify"] = CA_CERT_PATH
+    if MTLS_CERT_PATH and MTLS_KEY_PATH:
+        kwargs["cert"] = (MTLS_CERT_PATH, MTLS_KEY_PATH)
+    return httpx.AsyncClient(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# SLO monitoring background task
+# ---------------------------------------------------------------------------
+
+def _check_and_rollback_degraded():
+    for pid, promo in list(promotions_db.items()):
+        if promo.status.phase != "SUCCEEDED":
+            continue
+        gitops = promo.status.gitops
+        if gitops and gitops.health_status == "degraded":
+            # Find the target environment
+            target_env_name = promo.spec.target_environment
+            env = next((e for e in environments_db.values() if e.name == target_env_name), None)
+            if env and promo.status.rollback_version_id:
+                logger.warning(
+                    "slo_auto_rollback_triggered",
+                    promotion_id=pid,
+                    environment=target_env_name,
+                    health_status=gitops.health_status,
+                )
+                controller.execute_rollback(
+                    promotion=promo,
+                    target_env=env,
+                    version_id=promo.status.rollback_version_id,
+                    reason="slo_health_degraded",
+                    actor="slo-monitor",
+                )
+                promo.status.phase = "ROLLED_BACK"
+                save_promotions(promotions_db)
+
+
+async def _slo_monitor_loop():
+    """Background task: auto-rollback promotions whose GitOps health degrades."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            _check_and_rollback_degraded()
+        except Exception as e:
+            logger.warning("slo_monitor_error", error=str(e))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start SLO monitoring background task
+    task = asyncio.create_task(_slo_monitor_loop())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(title="MEDS API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -522,6 +593,28 @@ async def trigger_rollback(promotion_id: str, body: dict = {}):
         pass
     save_promotions(promotions_db)
     return {"status": "rolled_back", "promotion_id": promotion_id, "gitops": result}
+
+
+@app.get("/api/slo/status")
+async def get_slo_status():
+    """Return current SLO health status for all active promotions."""
+    slo_status = []
+    for pid, promo in promotions_db.items():
+        gitops = promo.status.gitops
+        slo_status.append({
+            "promotion_id": pid,
+            "name": promo.metadata.get("name"),
+            "phase": promo.status.phase,
+            "environment": promo.spec.target_environment,
+            "health_status": gitops.health_status if gitops else "unknown",
+            "sync_status": gitops.sync_status if gitops else "unknown",
+            "slo_breached": bool(gitops and gitops.health_status == "degraded"),
+        })
+    return {
+        "slo_checks": slo_status,
+        "total": len(slo_status),
+        "breached": sum(1 for s in slo_status if s["slo_breached"]),
+    }
 
 
 @app.get("/api/clusters")

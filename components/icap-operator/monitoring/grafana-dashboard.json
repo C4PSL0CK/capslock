@@ -1,0 +1,111 @@
+{
+  "title": "ICAP Operator — Health & Scaling",
+  "uid": "capslock-icap-operator",
+  "tags": ["capslock", "icap", "security"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {"from": "now-1h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Aggregate Health Score",
+      "type": "gauge",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 100, "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 50},
+              {"color": "green", "value": 70}
+            ]
+          }
+        }
+      },
+      "targets": [{"expr": "capslock_icap_health_score", "legendFormat": "Health Score"}]
+    },
+    {
+      "id": 2,
+      "title": "Ready Replicas",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "kube_deployment_status_replicas_ready{deployment=~\".*icap.*\"}", "legendFormat": "Ready"}]
+    },
+    {
+      "id": 3,
+      "title": "Desired Replicas",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [{"expr": "kube_deployment_spec_replicas{deployment=~\".*icap.*\"}", "legendFormat": "Desired"}]
+    },
+    {
+      "id": 4,
+      "title": "ICAP Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "rate(istio_requests_total{destination_service=~\"icap.*\"}[1m])", "legendFormat": "{{destination_version}}"}
+      ]
+    },
+    {
+      "id": 5,
+      "title": "ClamAV Signature Age (hours)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 4},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 24},
+              {"color": "red", "value": 48}
+            ]
+          }
+        }
+      },
+      "targets": [{"expr": "capslock_icap_clamav_signature_age_hours", "legendFormat": "Sig Age (h)"}]
+    },
+    {
+      "id": 6,
+      "title": "Scaling Events",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "changes(kube_deployment_spec_replicas{deployment=~\".*icap.*\"}[5m])", "legendFormat": "Replica changes/5m"}
+      ]
+    },
+    {
+      "id": 7,
+      "title": "ICAP Threats Detected",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      },
+      "targets": [{"expr": "increase(capslock_icap_threats_detected_total[1h])", "legendFormat": "Threats/1h"}]
+    },
+    {
+      "id": 8,
+      "title": "p95 ICAP Scan Latency",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 20},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, rate(capslock_icap_scan_duration_seconds_bucket[5m]))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, rate(capslock_icap_scan_duration_seconds_bucket[5m]))", "legendFormat": "p99"}
+      ]
+    }
+  ]
+}

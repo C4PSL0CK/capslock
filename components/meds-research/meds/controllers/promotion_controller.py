@@ -15,6 +15,22 @@ from meds.utils.logger import get_logger
 
 POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
 
+# TLS configuration for inter-component calls
+CA_CERT_PATH   = os.getenv("CA_CERT_PATH", "")
+MTLS_CERT_PATH = os.getenv("MTLS_CERT_PATH", "")
+MTLS_KEY_PATH  = os.getenv("MTLS_KEY_PATH", "")
+
+
+def _make_http_client(timeout: float = 5.0) -> httpx.Client:
+    """Return an httpx Client with optional mTLS configuration."""
+    kwargs: dict = {"timeout": timeout}
+    if CA_CERT_PATH:
+        kwargs["verify"] = CA_CERT_PATH
+    if MTLS_CERT_PATH and MTLS_KEY_PATH:
+        kwargs["cert"] = (MTLS_CERT_PATH, MTLS_KEY_PATH)
+    return httpx.Client(**kwargs)
+
+
 # Valid promotion state machine transitions
 _VALID_TRANSITIONS: Dict[str, list] = {
     "development": ["staging"],
@@ -302,10 +318,10 @@ class PromotionController:
         if not POLICY_ENGINE_URL:
             return None
         try:
-            r = httpx.get(
-                f"{POLICY_ENGINE_URL}/api/integration/icap/policy-status/{namespace}",
-                timeout=3.0,
-            )
+            with _make_http_client(timeout=3.0) as client:
+                r = client.get(
+                    f"{POLICY_ENGINE_URL}/api/integration/icap/policy-status/{namespace}",
+                )
             r.raise_for_status()
             return float(r.json().get("compliance_score", 1.0))
         except Exception:
@@ -317,12 +333,12 @@ class PromotionController:
         if not POLICY_ENGINE_URL:
             return
         try:
-            httpx.post(
-                f"{POLICY_ENGINE_URL}/api/integration/meds/notify",
-                json={"namespace": namespace, "environment": environment,
-                      "promotion_id": promotion_id, "version": version},
-                timeout=5.0,
-            )
+            with _make_http_client(timeout=5.0) as client:
+                client.post(
+                    f"{POLICY_ENGINE_URL}/api/integration/meds/notify",
+                    json={"namespace": namespace, "environment": environment,
+                          "promotion_id": promotion_id, "version": version},
+                )
         except Exception as e:
             self.logger.warning("policy_engine_notify_failed", error=str(e))
 

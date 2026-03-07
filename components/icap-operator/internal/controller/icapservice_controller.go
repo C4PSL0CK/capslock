@@ -22,11 +22,13 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -80,7 +82,13 @@ func (r *ICAPServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	// Step 3: Update status
+	// Step 3: Reconcile HPA
+	if err := r.reconcileHPA(ctx, icapService); err != nil {
+		logger.Error(err, "Failed to reconcile HPA")
+		return ctrl.Result{}, err
+	}
+
+	// Step 4: Update status
 	if err := r.updateStatus(ctx, icapService); err != nil {
 		logger.Error(err, "Failed to update status")
 		return ctrl.Result{}, err
@@ -118,6 +126,12 @@ func (r *ICAPServiceReconciler) reconcileDeployment(ctx context.Context, icapSer
 						"app":     "icap",
 						"service": icapService.Name,
 					},
+					Annotations: map[string]string{
+						"sidecar.istio.io/inject": "true",
+						"prometheus.io/scrape":    "true",
+						"prometheus.io/port":      "1344",
+						"prometheus.io/path":      "/metrics",
+					},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
@@ -145,6 +159,26 @@ func (r *ICAPServiceReconciler) reconcileDeployment(ctx context.Context, icapSer
 									Value: "3310",
 								},
 							},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									TCPSocket: &corev1.TCPSocketAction{
+										Port: intstr.FromInt(1344),
+									},
+								},
+								InitialDelaySeconds: 15,
+								PeriodSeconds:       20,
+								FailureThreshold:    3,
+							},
+							ReadinessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									TCPSocket: &corev1.TCPSocketAction{
+										Port: intstr.FromInt(1344),
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       10,
+								FailureThreshold:    3,
+							},
 						},
 						{
 							Name:  "clamav",
@@ -160,6 +194,16 @@ func (r *ICAPServiceReconciler) reconcileDeployment(ctx context.Context, icapSer
 									Name:  "CLAMAV_NO_FRESHCLAM",
 									Value: "false",
 								},
+							},
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									TCPSocket: &corev1.TCPSocketAction{
+										Port: intstr.FromInt(3310),
+									},
+								},
+								InitialDelaySeconds: 60, // ClamAV takes time to load signatures
+								PeriodSeconds:       30,
+								FailureThreshold:    5,
 							},
 						},
 					},
@@ -238,6 +282,78 @@ func (r *ICAPServiceReconciler) reconcileService(ctx context.Context, icapServic
 	}
 
 	return nil
+}
+
+// reconcileHPA creates or updates the HPA for health-score-driven scaling
+func (r *ICAPServiceReconciler) reconcileHPA(ctx context.Context, icapService *securityv1alpha1.ICAPService) error {
+	logger := log.FromContext(ctx)
+
+	minReplicas := int32(icapService.Spec.ScalingPolicy.MinReplicas)
+	maxReplicas := int32(icapService.Spec.ScalingPolicy.MaxReplicas)
+	targetScore := int32(icapService.Spec.ScalingPolicy.TargetHealthScore)
+
+	// Use CPU utilisation as the HPA metric proxy for health score
+	// (real health score lives in custom metrics; CPU is the universal fallback)
+	cpuTarget := int32(70) // 70% CPU utilisation target
+	if targetScore > 0 {
+		// Map target health score (0-100) to an inverse CPU target
+		// High health score target → lower CPU target → scale out sooner
+		cpuTarget = int32(100 - targetScore/2)
+		if cpuTarget < 20 {
+			cpuTarget = 20
+		}
+	}
+
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      icapService.Name + "-hpa",
+			Namespace: icapService.Namespace,
+			Labels: map[string]string{
+				"app":     "icap",
+				"service": icapService.Name,
+			},
+		},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{
+				APIVersion: "apps/v1",
+				Kind:       "Deployment",
+				Name:       icapService.Name + "-deployment",
+			},
+			MinReplicas: &minReplicas,
+			MaxReplicas: maxReplicas,
+			Metrics: []autoscalingv2.MetricSpec{
+				{
+					Type: autoscalingv2.ResourceMetricSourceType,
+					Resource: &autoscalingv2.ResourceMetricSource{
+						Name: corev1.ResourceCPU,
+						Target: autoscalingv2.MetricTarget{
+							Type:               autoscalingv2.UtilizationMetricType,
+							AverageUtilization: &cpuTarget,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := ctrl.SetControllerReference(icapService, hpa, r.Scheme); err != nil {
+		return err
+	}
+
+	found := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := r.Get(ctx, types.NamespacedName{Name: hpa.Name, Namespace: hpa.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		logger.Info("Creating HPA", "name", hpa.Name)
+		return r.Create(ctx, hpa)
+	} else if err != nil {
+		return err
+	}
+
+	// Update HPA if scaling policy changed
+	found.Spec.MinReplicas = &minReplicas
+	found.Spec.MaxReplicas = maxReplicas
+	logger.Info("Updating HPA", "name", hpa.Name)
+	return r.Update(ctx, found)
 }
 
 // updateStatus updates the ICAPService status
@@ -338,6 +454,7 @@ func (r *ICAPServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&securityv1alpha1.ICAPService{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
 		Named("icapservice").
 		Complete(r)
 }
