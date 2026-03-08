@@ -1062,10 +1062,25 @@ class _ApplyPolicyRequest(BaseModel):
 
 
 _NS_POLICY_MAP = {
-    "dev-test":     {"environment": "development", "policy": "dev-policy",     "enforcement": "audit"},
-    "staging-test": {"environment": "staging",     "policy": "staging-policy", "enforcement": "enforce"},
-    "prod-test":    {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
+    "dev-test":        {"environment": "development", "policy": "dev-policy",     "enforcement": "audit"},
+    "staging-test":    {"environment": "staging",     "policy": "staging-policy", "enforcement": "enforce"},
+    "prod-test":       {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
+    "default":         {"environment": "development", "policy": "dev-policy",     "enforcement": "audit"},
+    "kube-system":     {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
+    "capslock-system": {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
+    "monitoring":      {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
 }
+
+
+def _infer_ns_policy(namespace: str) -> dict:
+    """Infer environment and policy from namespace name patterns."""
+    ns = namespace.lower()
+    if any(kw in ns for kw in ("prod", "production", "prd")):
+        return {"environment": "production", "policy": "prod-policy", "enforcement": "strict"}
+    if any(kw in ns for kw in ("stag", "staging", "stage", "uat")):
+        return {"environment": "staging", "policy": "staging-policy", "enforcement": "enforce"}
+    # dev / development / default / everything else
+    return {"environment": "development", "policy": "dev-policy", "enforcement": "audit"}
 
 
 @app.post("/api/policy-engine/namespaces/{namespace}/apply")
@@ -1082,11 +1097,8 @@ async def pe_apply_policy(namespace: str, body: _ApplyPolicyRequest):
                     return r.json()
         except Exception:
             pass
-    # Fallback: simulate policy application from known namespace map
-    info = _NS_POLICY_MAP.get(
-        namespace,
-        {"environment": "unknown", "policy": "default-policy", "enforcement": "audit"},
-    )
+    # Fallback: look up known map first, then infer from namespace name
+    info = _NS_POLICY_MAP.get(namespace) or _infer_ns_policy(namespace)
     return {
         "namespace": namespace,
         "environment": info["environment"],
