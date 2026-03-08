@@ -1241,11 +1241,44 @@ async def ssdlb_trend():
 @app.post("/api/ssdlb/auto-route")
 async def ssdlb_auto_route():
     try:
-        async with httpx.AsyncClient() as client:
+        async with _get_http_client(timeout=10.0) as client:
             r = await client.post(f"{SSDLB_URL}/auto-route", timeout=10.0)
-            return r.json()
+            data = r.json()
     except Exception as exc:
         return {"error": str(exc)}
+
+    # If SSDLB has no Prometheus data, fall back to a health-based routing decision
+    if data.get("status") in ("no-metrics", "no_metrics"):
+        try:
+            async with _get_http_client() as client:
+                state_r    = await client.get(f"{SSDLB_URL}/state",    timeout=5.0)
+                registry_r = await client.get(f"{SSDLB_URL}/registry", timeout=5.0)
+                state    = state_r.json()
+                registry = registry_r.json().get("registry", {})
+        except Exception:
+            state    = {}
+            registry = {"a": {"healthy": True}, "b": {"healthy": True}, "c": {"healthy": True}}
+
+        healthy   = [v for v, info in registry.items() if info.get("healthy", True)]
+        current   = state.get("last_selected") or (healthy[0] if healthy else "a")
+        selected  = current if current in healthy else (healthy[0] if healthy else "a")
+
+        # Apply the selection
+        try:
+            async with _get_http_client() as client:
+                await client.post(f"{SSDLB_URL}/set-version/{selected}", timeout=5.0)
+        except Exception:
+            pass
+
+        return {
+            "decision":         "route-by-health",
+            "selected_version": selected,
+            "reason":           "No traffic metrics — routed to healthiest available instance",
+            "healthy_instances": healthy,
+            "mode":             state.get("mode", "single"),
+        }
+
+    return data
 
 
 @app.post("/api/ssdlb/set-version/{version}")

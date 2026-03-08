@@ -1423,23 +1423,10 @@ async function lbAutoRoute() {
             return;
         }
 
-        // No traffic data — Prometheus unreachable or no requests recorded yet
-        if (d.status === 'no-metrics' || d.status === 'no_metrics') {
-            dec.innerHTML = `<div style="display:flex;align-items:flex-start;gap:14px;padding:16px;background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);border-radius:10px">
-                <div style="font-size:1.6rem;line-height:1">📊</div>
-                <div>
-                    <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px">No traffic data available</div>
-                    <div style="opacity:0.65;font-size:0.82rem">The load balancer has no request-rate metrics to base a routing decision on. This is normal when Prometheus is not running or no traffic has been received yet.</div>
-                    <div style="margin-top:8px;font-size:0.78rem;opacity:0.45">The engine will route automatically once traffic is detected.</div>
-                </div>
-            </div>`;
-            return;
-        }
-
         const decisionColor = d.decision === 'no_change' ? 'var(--text-primary)' :
                               (d.decision === 'force_spread' || d.decision === 'enter_spread') ? 'var(--accent)' : 'var(--success,#28a745)';
         const skipKeys = ['decision', 'selected_version'];
-        const labelMap = { status: 'Status', reason: 'Reason', current_version: 'Current Instance', cooldown: 'Cooldown Active', spread_mode: 'Spread Mode', total_rate: 'Total Rate (req/s)' };
+        const labelMap = { status: 'Status', reason: 'Reason', current_version: 'Current Instance', cooldown: 'Cooldown Active', spread_mode: 'Spread Mode', total_rate: 'Total Rate (req/s)', healthy_instances: 'Healthy Instances', mode: 'Mode' };
         const rows = Object.entries(d).filter(([k]) => !skipKeys.includes(k)).map(([k, v]) => {
             const label = labelMap[k] || k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
             return `<tr style="border-bottom:1px solid var(--border)">
