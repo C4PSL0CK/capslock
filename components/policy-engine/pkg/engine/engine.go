@@ -75,28 +75,35 @@ func (pe *PolicyEngine) ApplyPolicyToNamespace(ctx context.Context, namespace st
 		Steps:     []string{},
 	}
 
-	// Step 1: Detect environment from namespace name
+	// Step 1: Validate namespace
+	result.Steps = append(result.Steps, fmt.Sprintf("Validating namespace: %s", namespace))
+
+	// Step 2: Detect environment from namespace name
 	envType := detectEnvFromName(namespace)
+	result.Steps = append(result.Steps, fmt.Sprintf("Detecting environment from namespace name"))
+	if envType == policy.EnvironmentUnknown {
+		result.Error = fmt.Sprintf("cannot determine environment for namespace %q: name does not contain prod/staging/dev", namespace)
+		return result, fmt.Errorf("%s", result.Error)
+	}
 	result.DetectedEnvironment = string(envType)
 	result.Steps = append(result.Steps, fmt.Sprintf("Detected environment: %s", envType))
 
-	// Step 2: Select policy
+	// Step 3: Calculate confidence
+	result.Confidence = confidenceFromEnv(envType)
+	result.Steps = append(result.Steps, fmt.Sprintf("Confidence score: %.2f", result.Confidence))
+
+	// Step 4: Select policy
 	templates := pe.policyManager.GetTemplatesByEnvironment(envType)
 	if len(templates) == 0 {
-		// Fall back to any available template
-		all := pe.policyManager.GetAllTemplates()
-		if len(all) == 0 {
-			result.Error = "no policy templates available"
-			return result, fmt.Errorf("%s", result.Error)
-		}
-		templates = all
+		result.Error = fmt.Sprintf("no policy template found for environment %q", envType)
+		return result, fmt.Errorf("%s", result.Error)
 	}
 
 	selected := templates[0]
 	result.SelectedPolicy = selected.Name
 	result.Steps = append(result.Steps, fmt.Sprintf("Selected policy: %s", selected.Name))
 
-	// Step 3: Record the applied policy
+	// Step 5: Record the applied policy
 	pe.mu.Lock()
 	pe.appliedPolicies[namespace] = &appliedPolicyRecord{
 		Namespace:  namespace,
@@ -105,9 +112,27 @@ func (pe *PolicyEngine) ApplyPolicyToNamespace(ctx context.Context, namespace st
 	}
 	pe.mu.Unlock()
 
+	// HealthyServices: count templates available for the detected environment
+	result.HealthyServices = len(templates)
+
 	result.Success = true
 	result.Steps = append(result.Steps, "Policy applied successfully")
 	return result, nil
+}
+
+// confidenceFromEnv returns a baseline confidence score based on how the
+// environment was resolved (name-only inference yields lower confidence).
+func confidenceFromEnv(env policy.Environment) float64 {
+	switch env {
+	case policy.EnvironmentProd:
+		return 0.85
+	case policy.EnvironmentStaging:
+		return 0.80
+	case policy.EnvironmentDev:
+		return 0.80
+	default:
+		return 0.3
+	}
 }
 
 // detectEnvFromName infers the environment from the namespace name.

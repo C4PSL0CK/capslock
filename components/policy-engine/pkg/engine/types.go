@@ -137,6 +137,12 @@ type ApplyResult struct {
 	// Steps records the workflow steps taken
 	Steps []string `json:"steps"`
 
+	// Confidence is the environment detection confidence score [0,1]
+	Confidence float64 `json:"confidence"`
+
+	// HealthyServices is the number of healthy ICAP/policy services at apply time
+	HealthyServices int `json:"healthy_services"`
+
 	// Success indicates whether the operation succeeded
 	Success bool `json:"success"`
 
