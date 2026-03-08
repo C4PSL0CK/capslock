@@ -1,4 +1,4 @@
-const API_BASE = `http://${window.location.hostname}:${window.location.port}/api`;
+const API_BASE = `${window.location.origin}/api`;
 
 let policies = [];
 let promotions = [];
