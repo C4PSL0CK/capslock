@@ -1004,8 +1004,6 @@ _PE_NAMESPACE_FALLBACK = [
     {"namespace": "staging-test",    "environment": "staging",     "policy": "staging-policy", "confidence": 0.95},
     {"namespace": "prod-test",       "environment": "production",  "policy": "prod-policy",    "confidence": 0.95},
     {"namespace": "capslock-system", "environment": "production",  "policy": "prod-policy",    "confidence": 0.85},
-    {"namespace": "kube-system",     "environment": "production",  "policy": "prod-policy",    "confidence": 0.80},
-    {"namespace": "monitoring",      "environment": "production",  "policy": "prod-policy",    "confidence": 0.75},
 ]
 
 
@@ -1159,15 +1157,33 @@ async def pe_apply_policy(namespace: str, body: _ApplyPolicyRequest):
         except Exception:
             pass
     info = _NS_POLICY_MAP.get(namespace) or _infer_ns_policy(namespace)
+    policy_name = info["policy"]
+    policy_details = next((p for p in _PE_POLICIES_FALLBACK if p["name"] == policy_name), {})
+    env = info["environment"]
+    pod_security = "restricted" if env == "production" else "baseline" if env == "staging" else "baseline"
+    network_policies = env in ("production", "staging")
+    external_secrets = env == "production"
+    privileged_containers = env == "development"
     return {
         "namespace": namespace,
-        "environment": info["environment"],
-        "policy": info["policy"],
+        "environment": env,
+        "policy": policy_name,
         "enforcement": info["enforcement"],
         "icap_mode": info["icap_mode"],
         "strategy": body.strategy,
         "status": "applied",
         "source": "local-fallback",
+        "description": policy_details.get("description", ""),
+        "compliance_frameworks": policy_details.get("compliance_frameworks", ["cis"]),
+        "controls": {
+            "pod_security_standard": pod_security,
+            "privileged_containers": privileged_containers,
+            "require_network_policies": network_policies,
+            "external_secrets_manager": external_secrets,
+            "allow_secrets_as_env_vars": not external_secrets,
+            "require_resource_limits": env != "development",
+            "run_as_non_root": env == "production",
+        },
     }
 
 

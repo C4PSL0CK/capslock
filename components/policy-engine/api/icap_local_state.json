@@ -1,1 +1,1 @@
-{"scanning_mode": "warn", "replicas": 2, "health_score": 92, "clamav_image": "clamav/clamav:latest"}
+{"scanning_mode": "block", "replicas": 2, "health_score": 92, "clamav_image": "clamav/clamav:latest"}

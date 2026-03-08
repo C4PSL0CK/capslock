@@ -1226,15 +1226,59 @@ async function applyPEPolicy() {
             const enforcement = data.enforcement || data.enforcement_mode || '—';
             const icap = data.icap_mode || '—';
             const enfClr = enforcement === 'strict' ? '#ef4444' : enforcement === 'enforce' ? '#f59e0b' : '#10b981';
-            el.innerHTML = `<div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.83rem">
-                <div style="font-weight:600;color:#10b981;margin-bottom:10px;font-size:0.88rem">Policy applied successfully</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
-                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Namespace</div><strong style="font-family:monospace">${ns}</strong></div>
-                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Environment</div><span class="badge badge-${envBadgeClass(env)}">${env}</span></div>
-                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Policy</div><strong>${policy}</strong></div>
-                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Enforcement</div><strong style="color:${enfClr}">${enforcement}</strong></div>
-                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">ICAP scanning</div><strong>${icap}</strong></div>
-                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Conflict strategy</div><span style="opacity:0.75">${strategy}</span></div>
+            const icapClr = icap === 'block' ? '#ef4444' : icap === 'warn' ? '#f59e0b' : '#6366f1';
+            const description = data.description || '';
+            const frameworks = (data.compliance_frameworks || ['cis']).map(f => `<span style="background:rgba(99,102,241,0.15);color:#818cf8;border-radius:4px;padding:1px 6px;font-size:0.72rem">${f.toUpperCase()}</span>`).join(' ');
+            const controls = data.controls || {};
+
+            const controlRow = (label, value, icon) => {
+                const isEnabled = value === true || value === 'restricted' || value === 'baseline';
+                const isDisabled = value === false;
+                let clr = isEnabled ? '#10b981' : isDisabled ? '#ef4444' : '#f59e0b';
+                let display = typeof value === 'boolean' ? (value ? 'Enabled' : 'Disabled') : value;
+                return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+                    <span style="opacity:0.7;font-size:0.78rem">${icon} ${label}</span>
+                    <span style="color:${clr};font-size:0.78rem;font-weight:600">${display}</span>
+                </div>`;
+            };
+
+            el.innerHTML = `<div style="margin-top:12px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                    <div style="width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 6px #10b981"></div>
+                    <span style="font-weight:600;color:#10b981;font-size:0.9rem">Policy applied to <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px">${ns}</code></span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:10px">
+                        <div style="opacity:0.45;font-size:0.7rem;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.05em">Environment</div>
+                        <span class="badge badge-${envBadgeClass(env)}">${env}</span>
+                    </div>
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:10px">
+                        <div style="opacity:0.45;font-size:0.7rem;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.05em">Active Policy</div>
+                        <strong style="font-size:0.82rem">${policy}</strong>
+                    </div>
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:10px">
+                        <div style="opacity:0.45;font-size:0.7rem;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.05em">Enforcement Mode</div>
+                        <strong style="color:${enfClr};font-size:0.85rem">${enforcement}</strong>
+                    </div>
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:10px">
+                        <div style="opacity:0.45;font-size:0.7rem;margin-bottom:3px;text-transform:uppercase;letter-spacing:0.05em">ICAP Scanning</div>
+                        <strong style="color:${icapClr};font-size:0.85rem">${icap}</strong>
+                    </div>
+                </div>
+                ${description ? `<div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:8px;padding:10px;font-size:0.79rem;opacity:0.85;margin-bottom:12px">${description}</div>` : ''}
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px">
+                    <div style="font-size:0.75rem;font-weight:600;opacity:0.55;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Security Controls Applied</div>
+                    ${controlRow('Pod Security Standard', controls.pod_security_standard || '—', '🛡️')}
+                    ${controlRow('Privileged Containers', controls.privileged_containers, '⚠️')}
+                    ${controlRow('Network Policies Required', controls.require_network_policies, '🌐')}
+                    ${controlRow('External Secrets Manager', controls.external_secrets_manager, '🔐')}
+                    ${controlRow('Secrets as Env Vars', controls.allow_secrets_as_env_vars, '📋')}
+                    ${controlRow('Resource Limits Required', controls.require_resource_limits, '📊')}
+                    ${controlRow('Run as Non-Root', controls.run_as_non_root, '👤')}
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="font-size:0.73rem;opacity:0.5">Compliance: ${frameworks}</div>
+                    <div style="font-size:0.72rem;opacity:0.4">Strategy: ${strategy}</div>
                 </div>
             </div>`;
             loadPENamespaces();
@@ -1378,22 +1422,37 @@ async function lbAutoRoute() {
             dec.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${d.error}</p>`;
             return;
         }
+
+        // No traffic data — Prometheus unreachable or no requests recorded yet
+        if (d.status === 'no-metrics' || d.status === 'no_metrics') {
+            dec.innerHTML = `<div style="display:flex;align-items:flex-start;gap:14px;padding:16px;background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);border-radius:10px">
+                <div style="font-size:1.6rem;line-height:1">📊</div>
+                <div>
+                    <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px">No traffic data available</div>
+                    <div style="opacity:0.65;font-size:0.82rem">The load balancer has no request-rate metrics to base a routing decision on. This is normal when Prometheus is not running or no traffic has been received yet.</div>
+                    <div style="margin-top:8px;font-size:0.78rem;opacity:0.45">The engine will route automatically once traffic is detected.</div>
+                </div>
+            </div>`;
+            return;
+        }
+
         const decisionColor = d.decision === 'no_change' ? 'var(--text-primary)' :
                               (d.decision === 'force_spread' || d.decision === 'enter_spread') ? 'var(--accent)' : 'var(--success,#28a745)';
+        const skipKeys = ['decision', 'selected_version'];
+        const labelMap = { status: 'Status', reason: 'Reason', current_version: 'Current Instance', cooldown: 'Cooldown Active', spread_mode: 'Spread Mode', total_rate: 'Total Rate (req/s)' };
+        const rows = Object.entries(d).filter(([k]) => !skipKeys.includes(k)).map(([k, v]) => {
+            const label = labelMap[k] || k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            return `<tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:6px 10px;opacity:0.6;font-size:0.82rem">${label}</td>
+                <td style="padding:6px 10px;font-family:monospace;font-size:0.83rem">${typeof v === 'object' ? JSON.stringify(v) : String(v)}</td>
+            </tr>`;
+        }).join('');
         dec.innerHTML = `
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-                <div style="font-size:1.4rem;font-weight:700;color:${decisionColor};text-transform:uppercase">${d.decision || '-'}</div>
+                <div style="font-size:1.4rem;font-weight:700;color:${decisionColor};text-transform:uppercase">${d.decision || d.status || '-'}</div>
                 ${d.selected_version ? `<span style="background:var(--accent);color:#fff;border-radius:6px;padding:2px 10px;font-size:0.88rem">Instance ${d.selected_version.toUpperCase()}</span>` : ''}
             </div>
-            <table style="width:100%;border-collapse:collapse;font-size:0.87rem">
-                <tbody>
-                    ${Object.entries(d).filter(([k]) => !['decision','selected_version'].includes(k)).map(([k,v]) =>
-                        `<tr style="border-bottom:1px solid var(--border)">
-                            <td style="padding:6px 10px;opacity:0.65">${k}</td>
-                            <td style="padding:6px 10px;font-family:monospace">${typeof v === 'object' ? JSON.stringify(v) : String(v)}</td>
-                        </tr>`).join('')}
-                </tbody>
-            </table>`;
+            ${rows ? `<table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>` : ''}`;
         loadLBState();
     } catch (e) {
         el.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
