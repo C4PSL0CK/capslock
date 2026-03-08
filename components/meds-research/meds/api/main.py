@@ -999,9 +999,13 @@ async def demo_traffic_scenarios():
 # ---------------------------------------------------------------------------
 
 _PE_NAMESPACE_FALLBACK = [
-    {"namespace": "dev-test",     "environment": "development", "policy": "dev-policy"},
-    {"namespace": "staging-test", "environment": "staging",     "policy": "staging-policy"},
-    {"namespace": "prod-test",    "environment": "production",  "policy": "prod-policy"},
+    {"namespace": "default",         "environment": "development", "policy": "dev-policy",     "confidence": 0.60},
+    {"namespace": "dev-test",        "environment": "development", "policy": "dev-policy",     "confidence": 0.95},
+    {"namespace": "staging-test",    "environment": "staging",     "policy": "staging-policy", "confidence": 0.95},
+    {"namespace": "prod-test",       "environment": "production",  "policy": "prod-policy",    "confidence": 0.95},
+    {"namespace": "capslock-system", "environment": "production",  "policy": "prod-policy",    "confidence": 0.85},
+    {"namespace": "kube-system",     "environment": "production",  "policy": "prod-policy",    "confidence": 0.80},
+    {"namespace": "monitoring",      "environment": "production",  "policy": "prod-policy",    "confidence": 0.75},
 ]
 
 
