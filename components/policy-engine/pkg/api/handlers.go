@@ -106,7 +106,7 @@ func (s *Server) HandleListPolicies(w http.ResponseWriter, r *http.Request) {
 			Version:     t.Version,
 			Environment: string(t.Environment),
 			Description: t.Description,
-			Compliance:  t.Compliance.Standards,
+			Compliance:  t.ComplianceConfig.Standards,
 		}
 	}
 

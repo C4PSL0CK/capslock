@@ -9,11 +9,11 @@ import (
 
 // PodAnalyzer analyzes pod security contexts
 type PodAnalyzer struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 }
 
 // NewPodAnalyzer creates a new pod analyzer
-func NewPodAnalyzer(clientset *kubernetes.Clientset) *PodAnalyzer {
+func NewPodAnalyzer(clientset kubernetes.Interface) *PodAnalyzer {
 	return &PodAnalyzer{
 		clientset: clientset,
 	}

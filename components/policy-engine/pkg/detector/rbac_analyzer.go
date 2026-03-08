@@ -9,11 +9,11 @@ import (
 
 // RBACAnalyzer analyzes RBAC configurations
 type RBACAnalyzer struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 }
 
 // NewRBACAnalyzer creates a new RBAC analyzer
-func NewRBACAnalyzer(clientset *kubernetes.Clientset) *RBACAnalyzer {
+func NewRBACAnalyzer(clientset kubernetes.Interface) *RBACAnalyzer {
 	return &RBACAnalyzer{
 		clientset: clientset,
 	}

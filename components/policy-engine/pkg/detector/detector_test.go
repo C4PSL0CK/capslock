@@ -371,11 +371,9 @@ func TestDetect_MultipleComplianceStandards(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "multi-compliance",
 				Labels: map[string]string{
-					"environment":         "prod",
+					"environment":        "prod",
 					"compliance-pci-dss": "true",
 					"compliance-cis":     "true",
-					"compliance-cis":      "true",
-					"compliance-pci-dss":  "true",
 				},
 			},
 		},
@@ -393,8 +391,8 @@ func TestDetect_MultipleComplianceStandards(t *testing.T) {
 
 	// Should have all 4 compliance standards
 	expectedStandards := []string{"cis", "pci-dss"}
-	if len(envCtx.ComplianceRequirements) != 4 {
-		t.Errorf("Expected 4 compliance standards, got %d", len(envCtx.ComplianceRequirements))
+	if len(envCtx.ComplianceRequirements) != 2 {
+		t.Errorf("Expected 2 compliance standards, got %d", len(envCtx.ComplianceRequirements))
 	}
 
 	for _, expected := range expectedStandards {
@@ -434,8 +432,8 @@ func TestDetect_ComplianceStringParsing(t *testing.T) {
 		t.Fatalf("Detect failed: %v", err)
 	}
 
-	if len(envCtx.ComplianceRequirements) != 4 {
-		t.Errorf("Expected 4 compliance standards from comma-separated string, got %d", len(envCtx.ComplianceRequirements))
+	if len(envCtx.ComplianceRequirements) != 2 {
+		t.Errorf("Expected 2 compliance standards from comma-separated string, got %d", len(envCtx.ComplianceRequirements))
 	}
 }
 

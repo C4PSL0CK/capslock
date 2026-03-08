@@ -6,17 +6,15 @@ import (
 	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/policy"
 )
 
-// Resolver detects and resolves policy conflicts
-type Resolver struct {
-	resolutionStrategy string // "priority", "compliance-aware", "risk-based"
-}
+// ResolutionStrategy selects how conflicts are resolved.
+type ResolutionStrategy string
 
-// NewResolver creates a new conflict resolver
-func NewResolver() *Resolver {
-	return &Resolver{
-		resolutionStrategy: "compliance-aware",
-	}
-}
+const (
+	StrategyPrecedence       ResolutionStrategy = "precedence"
+	StrategySecurityFirst    ResolutionStrategy = "security-first"
+	StrategyEnvironmentAware ResolutionStrategy = "environment-aware"
+	StrategyManual           ResolutionStrategy = "manual"
+)
 
 // ConflictType represents the type of conflict
 type ConflictType string
@@ -38,42 +36,54 @@ type PolicyConflict struct {
 	Remediation string       `json:"remediation"`
 }
 
+// Resolver detects and resolves policy conflicts
+type Resolver struct {
+	resolutionStrategy string // "priority", "compliance-aware", "risk-based"
+}
+
+// NewResolver creates a new conflict resolver
+func NewResolver() *Resolver {
+	return &Resolver{
+		resolutionStrategy: "compliance-aware",
+	}
+}
+
 // DetectConflicts detects conflicts in a policy
-func (r *Resolver) DetectConflicts(policy *policy.PolicyTemplate) []PolicyConflict {
+func (r *Resolver) DetectConflicts(pol *policy.PolicyTemplate) []PolicyConflict {
 	conflicts := []PolicyConflict{}
 
 	// Check enforcement vs risk level conflict
-	if policy.Enforcement.Mode == "strict" && policy.RiskLevel == "high" {
+	if pol.Enforcement.Mode == "strict" && pol.RiskLevel == "high" {
 		conflicts = append(conflicts, PolicyConflict{
 			Type:        ConflictTypeEnforcement,
 			Severity:    "MEDIUM",
 			Description: "Strict enforcement mode with high risk level may cause service disruptions",
-			Policy1:     policy.Name,
+			Policy1:     pol.Name,
 			Remediation: "Consider using 'audit' mode first or lowering risk level",
 		})
 	}
 
 	// Check compliance requirements vs configuration
-	if len(policy.Compliance.Standards) > 0 {
+	if len(pol.ComplianceConfig.Standards) > 0 {
 		// Check if Pod Security Standard is set appropriately
-		if contains(policy.Compliance.Standards, "pci-dss") && policy.PodSecurity.Standard != "restricted" {
+		if contains(pol.ComplianceConfig.Standards, "pci-dss") && pol.PodSecurity.Standard != "restricted" {
 			conflicts = append(conflicts, PolicyConflict{
 				Type:        ConflictTypeCompliance,
 				Severity:    "HIGH",
 				Description: "PCI-DSS compliance requires 'restricted' Pod Security Standard",
-				Policy1:     policy.Name,
+				Policy1:     pol.Name,
 				Remediation: "Set pod_security.standard to 'restricted'",
 			})
 		}
 
 		// Check if network policies are required for compliance
-		if contains(policy.Compliance.Standards, "cis") || contains(policy.Compliance.Standards, "pci-dss") {
-			if !policy.Network.RequireNetworkPolicies {
+		if contains(pol.ComplianceConfig.Standards, "cis") || contains(pol.ComplianceConfig.Standards, "pci-dss") {
+			if !pol.Network.RequireNetworkPolicies {
 				conflicts = append(conflicts, PolicyConflict{
 					Type:        ConflictTypeCompliance,
 					Severity:    "HIGH",
 					Description: "CIS and PCI-DSS compliance require network policies",
-					Policy1:     policy.Name,
+					Policy1:     pol.Name,
 					Remediation: "Set network.require_network_policies to true",
 				})
 			}
@@ -81,12 +91,12 @@ func (r *Resolver) DetectConflicts(policy *policy.PolicyTemplate) []PolicyConfli
 	}
 
 	// Check resource limits configuration
-	if !policy.Resources.RequireResourceLimits && policy.TargetEnvironment == "production" {
+	if !pol.Resources.RequireResourceLimits && pol.TargetEnvironment == "production" {
 		conflicts = append(conflicts, PolicyConflict{
 			Type:        ConflictTypeConfiguration,
 			Severity:    "MEDIUM",
 			Description: "Production environment should require resource limits",
-			Policy1:     policy.Name,
+			Policy1:     pol.Name,
 			Remediation: "Set resources.require_resource_limits to true",
 		})
 	}
@@ -153,28 +163,28 @@ func (r *Resolver) resolveByRisk(policy1, policy2 *policy.PolicyTemplate) (*poli
 }
 
 // calculateComplianceScore calculates a score based on compliance coverage
-func (r *Resolver) calculateComplianceScore(policy *policy.PolicyTemplate) float64 {
+func (r *Resolver) calculateComplianceScore(pol *policy.PolicyTemplate) float64 {
 	score := 0.0
 
 	// Base score from number of compliance standards
-	score += float64(len(policy.Compliance.Standards)) * 10.0
+	score += float64(len(pol.ComplianceConfig.Standards)) * 10.0
 
 	// Bonus for critical standards
-	if contains(policy.Compliance.Standards, "pci-dss") {
+	if contains(pol.ComplianceConfig.Standards, "pci-dss") {
 		score += 20.0
 	}
-	if contains(policy.Compliance.Standards, "cis") {
+	if contains(pol.ComplianceConfig.Standards, "cis") {
 		score += 15.0
 	}
 
 	// Bonus for strict configurations
-	if policy.PodSecurity.Standard == "restricted" {
+	if pol.PodSecurity.Standard == "restricted" {
 		score += 10.0
 	}
-	if policy.Network.RequireNetworkPolicies {
+	if pol.Network.RequireNetworkPolicies {
 		score += 5.0
 	}
-	if policy.Resources.RequireResourceLimits {
+	if pol.Resources.RequireResourceLimits {
 		score += 5.0
 	}
 

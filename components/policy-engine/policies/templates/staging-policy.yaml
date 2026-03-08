@@ -2,6 +2,7 @@
 name: "staging-policy"
 description: "Security policy for staging environments - pre-production security"
 version: "1.0.0"
+environment: "staging"
 target_environment: "staging"
 risk_level: "medium"
 

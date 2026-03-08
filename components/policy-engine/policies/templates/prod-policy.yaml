@@ -2,6 +2,7 @@
 name: "prod-policy"
 description: "Maximum security policy for production environments - strict enforcement"
 version: "1.0.0"
+environment: "prod"
 target_environment: "prod"
 risk_level: "low"  # Low risk because of strict controls
 

@@ -10,10 +10,23 @@ import (
 // Environment represents a deployment environment tier
 type Environment string
 
+// EnvironmentType is an alias for Environment (for backward compatibility)
+type EnvironmentType = Environment
+
 const (
 	EnvironmentDev     Environment = "dev"
 	EnvironmentStaging Environment = "staging"
 	EnvironmentProd    Environment = "prod"
+	EnvironmentUnknown Environment = "unknown"
+)
+
+// SecurityLevel represents the security level of an environment
+type SecurityLevel string
+
+const (
+	SecurityLevelLow    SecurityLevel = "low"
+	SecurityLevelMedium SecurityLevel = "medium"
+	SecurityLevelHigh   SecurityLevel = "high"
 )
 
 // IcapConfiguration defines ICAP-specific content scanning settings
@@ -37,6 +50,11 @@ type PerformanceConfig struct {
 	ScanTimeoutSeconds int `yaml:"scan_timeout_seconds" json:"scan_timeout_seconds"`
 	// QueueSizeLimit is the maximum pending scan queue depth
 	QueueSizeLimit int `yaml:"queue_size_limit" json:"queue_size_limit"`
+
+	// Timeout is an alias for ScanTimeoutSeconds (used in tests)
+	Timeout int `yaml:"timeout" json:"timeout"`
+	// MaxConcurrent is an alias for MaxConcurrentScans (used in tests)
+	MaxConcurrent int `yaml:"max_concurrent" json:"max_concurrent"`
 }
 
 // PolicyTemplate represents a complete policy template
@@ -73,14 +91,14 @@ type PolicyTemplate struct {
 	// Resources configuration
 	Resources ResourcesConfig `yaml:"resources" json:"resources"`
 
-	// Compliance configuration
-	Compliance ComplianceConfig `yaml:"compliance" json:"compliance"`
+	// ComplianceConfig holds compliance framework requirements
+	ComplianceConfig ComplianceConfig `yaml:"compliance" json:"compliance"`
 
 	// ICAP content-scanning configuration applied to the icap-operator ICAPService CRD
 	IcapConfig IcapConfiguration `yaml:"icap_config" json:"icap_config"`
 
 	// Performance tuning for ICAP scan throughput
-	Performance PerformanceConfig `yaml:"performance" json:"performance"`
+	PerformanceConfig PerformanceConfig `yaml:"performance" json:"performance"`
 }
 
 // EnforcementConfig defines how the policy should be enforced
@@ -184,6 +202,11 @@ func LoadPolicyTemplate(filepath string) (*PolicyTemplate, error) {
 	var template PolicyTemplate
 	if err := yaml.Unmarshal(data, &template); err != nil {
 		return nil, err
+	}
+
+	// Back-fill Environment from TargetEnvironment if not set
+	if template.Environment == "" && template.TargetEnvironment != "" {
+		template.Environment = Environment(template.TargetEnvironment)
 	}
 
 	return &template, nil

@@ -12,11 +12,11 @@ import (
 
 // ConfigExtractor extracts security configuration from Kubernetes namespaces
 type ConfigExtractor struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 }
 
 // NewConfigExtractor creates a new config extractor
-func NewConfigExtractor(clientset *kubernetes.Clientset) *ConfigExtractor {
+func NewConfigExtractor(clientset kubernetes.Interface) *ConfigExtractor {
 	return &ConfigExtractor{
 		clientset: clientset,
 	}
@@ -537,7 +537,7 @@ func isDefaultDenyPolicy(np *networkingv1.NetworkPolicy) bool {
 	return false
 }
 
-func detectCNIPlugin(clientset *kubernetes.Clientset, ctx context.Context) string {
+func detectCNIPlugin(clientset kubernetes.Interface, ctx context.Context) string {
 	// Try to detect CNI plugin from common indicators
 	// This is best-effort detection
 

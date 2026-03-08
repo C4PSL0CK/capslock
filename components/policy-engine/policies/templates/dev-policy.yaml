@@ -2,6 +2,7 @@
 name: "dev-policy"
 description: "Security policy for development environments - relaxed but secure"
 version: "1.0.0"
+environment: "dev"
 target_environment: "dev"
 risk_level: "medium"
 

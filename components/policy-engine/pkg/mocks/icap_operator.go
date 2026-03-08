@@ -57,7 +57,7 @@ func (m *MockIcapOperator) ApplyPolicy(namespace string, pol *policy.PolicyTempl
 	detailsMsg := fmt.Sprintf("[ICAP] Policy details - Scanning: %s, MaxFileSize: %s, Compliance: %v",
 		pol.IcapConfig.ScanningMode,
 		pol.IcapConfig.MaxFileSize,
-		pol.Compliance.Standards)
+		pol.ComplianceConfig.Standards)
 	log.Println(detailsMsg)
 	m.callLog = append(m.callLog, detailsMsg)
 

@@ -10,11 +10,11 @@ import (
 
 // SecretsAnalyzer analyzes secrets usage
 type SecretsAnalyzer struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 }
 
 // NewSecretsAnalyzer creates a new secrets analyzer
-func NewSecretsAnalyzer(clientset *kubernetes.Clientset) *SecretsAnalyzer {
+func NewSecretsAnalyzer(clientset kubernetes.Interface) *SecretsAnalyzer {
 	return &SecretsAnalyzer{
 		clientset: clientset,
 	}

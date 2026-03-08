@@ -122,3 +122,39 @@ func (wr *WorkflowResult) GetCriticalViolations() []compliance.RuleViolation {
 	}
 	return wr.ComplianceReport.GetCriticalViolations()
 }
+
+// ApplyResult is the result of ApplyPolicyToNamespace.
+type ApplyResult struct {
+	// Namespace the policy was applied to
+	Namespace string `json:"namespace"`
+
+	// DetectedEnvironment is the detected environment type string
+	DetectedEnvironment string `json:"detected_environment"`
+
+	// SelectedPolicy is the name of the chosen policy template
+	SelectedPolicy string `json:"selected_policy"`
+
+	// Steps records the workflow steps taken
+	Steps []string `json:"steps"`
+
+	// Success indicates whether the operation succeeded
+	Success bool `json:"success"`
+
+	// Error holds an error message if the operation failed
+	Error string `json:"error,omitempty"`
+}
+
+// Status represents the deployment status of an applied policy.
+type Status struct {
+	Namespace  string    `json:"namespace"`
+	PolicyName string    `json:"policy_name"`
+	Status     string    `json:"status"`
+	AppliedAt  time.Time `json:"applied_at"`
+}
+
+// AppliedPolicy is a summary of an applied policy.
+type AppliedPolicy struct {
+	Namespace  string    `json:"namespace"`
+	PolicyName string    `json:"policy_name"`
+	AppliedAt  time.Time `json:"applied_at"`
+}

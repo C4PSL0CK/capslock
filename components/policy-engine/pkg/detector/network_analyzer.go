@@ -10,11 +10,11 @@ import (
 
 // NetworkAnalyzer analyzes network policies
 type NetworkAnalyzer struct {
-	clientset *kubernetes.Clientset
+	clientset kubernetes.Interface
 }
 
 // NewNetworkAnalyzer creates a new network analyzer
-func NewNetworkAnalyzer(clientset *kubernetes.Clientset) *NetworkAnalyzer {
+func NewNetworkAnalyzer(clientset kubernetes.Interface) *NetworkAnalyzer {
 	return &NetworkAnalyzer{
 		clientset: clientset,
 	}

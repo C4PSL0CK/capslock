@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/policy"
 )
 
 // Detector is the main detector that coordinates all analyzers
 type Detector struct {
-	clientset       *kubernetes.Clientset
+	clientset       kubernetes.Interface
 	configExtractor *ConfigExtractor
 	podAnalyzer     *PodAnalyzer
 	rbacAnalyzer    *RBACAnalyzer
@@ -20,7 +23,7 @@ type Detector struct {
 }
 
 // NewDetector creates a new detector with all analyzers
-func NewDetector(clientset *kubernetes.Clientset) *Detector {
+func NewDetector(clientset kubernetes.Interface) *Detector {
 	return &Detector{
 		clientset:       clientset,
 		configExtractor: NewConfigExtractor(clientset),
@@ -28,6 +31,83 @@ func NewDetector(clientset *kubernetes.Clientset) *Detector {
 		rbacAnalyzer:    NewRBACAnalyzer(clientset),
 		networkAnalyzer: NewNetworkAnalyzer(clientset),
 		secretsAnalyzer: NewSecretsAnalyzer(clientset),
+	}
+}
+
+// GetNamespace fetches a namespace and returns its EnvironmentContext.
+func (d *Detector) GetNamespace(ctx context.Context, namespace string) (*policy.EnvironmentContext, error) {
+	ns, err := d.clientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get namespace %q: %w", namespace, err)
+	}
+
+	labels := ns.Labels
+	if labels == nil {
+		labels = map[string]string{}
+	}
+
+	// Determine environment type from labels or namespace name
+	envType := policy.EnvironmentUnknown
+
+	if env, ok := labels["environment"]; ok {
+		envType = normalizeEnv(env)
+	} else if env, ok := labels["app.kubernetes.io/environment"]; ok {
+		envType = normalizeEnv(env)
+	} else {
+		// Infer from namespace name
+		lower := strings.ToLower(namespace)
+		if strings.Contains(lower, "prod") {
+			envType = policy.EnvironmentProd
+		} else if strings.Contains(lower, "staging") || strings.Contains(lower, "stage") {
+			envType = policy.EnvironmentStaging
+		} else if strings.Contains(lower, "dev") {
+			envType = policy.EnvironmentDev
+		}
+	}
+
+	// Determine security level
+	secLevel := policy.SecurityLevelLow
+	if sl, ok := labels["security-level"]; ok {
+		switch strings.ToLower(sl) {
+		case "low":
+			secLevel = policy.SecurityLevelLow
+		case "medium":
+			secLevel = policy.SecurityLevelMedium
+		case "high":
+			secLevel = policy.SecurityLevelHigh
+		}
+	} else {
+		// Infer from environment
+		switch envType {
+		case policy.EnvironmentProd:
+			secLevel = policy.SecurityLevelHigh
+		case policy.EnvironmentStaging:
+			secLevel = policy.SecurityLevelMedium
+		default:
+			secLevel = policy.SecurityLevelLow
+		}
+	}
+
+	return &policy.EnvironmentContext{
+		Namespace:       namespace,
+		EnvironmentType: envType,
+		SecurityLevel:   secLevel,
+		Labels:          labels,
+		DetectedAt:      time.Now(),
+	}, nil
+}
+
+// normalizeEnv maps a raw environment label value to a typed Environment.
+func normalizeEnv(env string) policy.Environment {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "prod", "production", "prd":
+		return policy.EnvironmentProd
+	case "staging", "stage", "stg", "uat":
+		return policy.EnvironmentStaging
+	case "dev", "development", "devel":
+		return policy.EnvironmentDev
+	default:
+		return policy.EnvironmentUnknown
 	}
 }
 
@@ -122,8 +202,8 @@ func (d *Detector) calculateEnvironmentWithConfidence(labels map[string]string, 
 	}
 
 	// Find highest score
-	maxEnv := "dev"
-	maxScore := scores["dev"]
+	maxEnv := ""
+	maxScore := 0.0
 	for env, score := range scores {
 		if score > maxScore {
 			maxScore = score
@@ -131,9 +211,9 @@ func (d *Detector) calculateEnvironmentWithConfidence(labels map[string]string, 
 		}
 	}
 
-	// If no labels at all, default to dev with low confidence
+	// If no labels at all, default to unknown with low confidence
 	if maxScore == 0.0 {
-		return "dev", 0.10
+		return "unknown", 0.05
 	}
 
 	return maxEnv, maxScore
