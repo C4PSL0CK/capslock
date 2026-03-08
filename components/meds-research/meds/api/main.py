@@ -1198,9 +1198,15 @@ async def _generate_promotion_reasoning(result: dict, request_data: dict) -> str
     version    = request_data.get("version", "")
     threat     = icap.get("threat_type") if icap.get("threat_found") else None
 
-    factor_lines = "\n".join(
-        f"  - {k}: {v}" for k, v in factors.items()
-    ) if factors else "  (not calculated)"
+    if isinstance(factors, list):
+        factor_lines = "\n".join(
+            f"  - {f.get('name','?')}: {f.get('weighted_score','?')} pts — {f.get('reason','')}"
+            for f in factors
+        ) if factors else "  (not calculated)"
+    elif isinstance(factors, dict):
+        factor_lines = "\n".join(f"  - {k}: {v}" for k, v in factors.items())
+    else:
+        factor_lines = "  (not calculated)"
 
     prompt = f"""A software deployment promotion was just evaluated by CAPSLOCK.
 
