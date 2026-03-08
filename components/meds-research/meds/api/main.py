@@ -399,6 +399,16 @@ async def create_promotion(request: CreatePromotionRequest):
     )
     policy_eval_duration = time.time() - policy_eval_start
 
+    # Generate NLP reasoning from Groq (non-blocking, best-effort)
+    reasoning = await _generate_promotion_reasoning(result, {
+        "version": request.version,
+        "source_environment": request.source_environment,
+        "target_environment": request.target_environment,
+        "add_policies": request.add_policies,
+        "remove_policies": request.remove_policies,
+    })
+    promotion.status.nlp_reasoning = reasoning or None
+
     promotions_db[promotion_id] = promotion
     if promotion.status.decision == "PENDING_APPROVAL":
         pending_approvals_db[promotion_id] = promotion_id
@@ -431,6 +441,7 @@ async def create_promotion(request: CreatePromotionRequest):
         "risk_score": risk_score,
         "max_allowed": result["risk_assessment"]["max_allowed"] if result["risk_assessment"] else None,
         "message": result["message"],
+        "nlp_reasoning": promotion.status.nlp_reasoning,
         "risk_assessment": result["risk_assessment"],
         "policy_plan": result["policy_plan"],
         "icap_scan": result["icap_scan"],
@@ -455,6 +466,7 @@ async def get_promotions():
             "cluster":      environments_db.get(p.spec.target_environment, Environment(name="", type="", max_risk_score=0, policies=[])).cluster,
             "gitops":       p.status.gitops.model_dump() if p.status.gitops else None,
             "approval_required": p.status.approval_required,
+            "nlp_reasoning":     p.status.nlp_reasoning,
         }
         for p in promotions_db.values()
     ]
@@ -1157,6 +1169,66 @@ async def ssdlb_set_version(version: str):
             return data
     except Exception as exc:
         return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Groq NLP reasoning for promotion decisions
+# ---------------------------------------------------------------------------
+
+async def _generate_promotion_reasoning(result: dict, request_data: dict) -> str:
+    """Call Groq to produce a plain-English explanation of a promotion decision."""
+    groq_api_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_api_key:
+        return ""
+    try:
+        from groq import AsyncGroq
+    except ImportError:
+        return ""
+
+    decision   = result.get("decision", "UNKNOWN")
+    risk       = result.get("risk_assessment") or {}
+    icap       = result.get("icap_scan") or {}
+    score      = risk.get("total_score", "N/A")
+    max_score  = risk.get("max_allowed", "N/A")
+    factors    = risk.get("factors", {})
+    add_p      = request_data.get("add_policies", [])
+    remove_p   = request_data.get("remove_policies", [])
+    src        = request_data.get("source_environment", "")
+    tgt        = request_data.get("target_environment", "")
+    version    = request_data.get("version", "")
+    threat     = icap.get("threat_type") if icap.get("threat_found") else None
+
+    factor_lines = "\n".join(
+        f"  - {k}: {v}" for k, v in factors.items()
+    ) if factors else "  (not calculated)"
+
+    prompt = f"""A software deployment promotion was just evaluated by CAPSLOCK.
+
+Decision: {decision}
+Application version: {version}
+Route: {src} -> {tgt}
+Risk score: {score} / {max_score} allowed
+ICAP threat detected: {threat if threat else 'No'}
+Policies added: {', '.join(add_p) if add_p else 'none'}
+Policies removed: {', '.join(remove_p) if remove_p else 'none'}
+Risk factor breakdown:
+{factor_lines}
+
+Write 2 sentences maximum explaining why this promotion was {decision}. Be direct and specific. \
+Use plain English — no bullet points, no markdown, no jargon. \
+Reference the actual numbers and factors that drove the decision."""
+
+    try:
+        client = AsyncGroq(api_key=groq_api_key)
+        resp = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=120,
+            temperature=0.3,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception:
+        return ""
 
 
 # ---------------------------------------------------------------------------

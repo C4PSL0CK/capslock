@@ -37,6 +37,7 @@ class PromotionStatus(BaseModel):
     risk_score: Optional[int] = None
     decision: Optional[str] = None  # APPROVED | REJECTED | PENDING_APPROVAL
     message: Optional[str] = None
+    nlp_reasoning: Optional[str] = None  # Groq-generated plain-English explanation
     approval_required: bool = False
     approved_by: Optional[str] = None
     approved_at: Optional[str] = None

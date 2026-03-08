@@ -139,7 +139,9 @@ function renderPromotions() {
                                 : '<span style="opacity:0.4">—</span>'}
                         </td>
                         <td style="text-align:center">
-                            <span class="badge badge-${p.decision === 'APPROVED' ? 'approved' : 'rejected'}">${p.decision}</span>
+                            <span class="badge badge-${p.decision === 'APPROVED' ? 'approved' : 'rejected'}"
+                                  title="${p.nlp_reasoning || ''}"
+                                  style="cursor:${p.nlp_reasoning ? 'help' : 'default'}">${p.decision}</span>
                         </td>
                     </tr>`;
                 }).join('')}
@@ -264,12 +266,20 @@ function showResult(result) {
         ? 'ICAP rejection: risk score not computed'
         : `Risk score: ${result.risk_score} / ${result.max_allowed}`;
 
+    const reasoningBlock = result.nlp_reasoning
+        ? `<div style="background:var(--bg-secondary,#1e1e2e);border-left:3px solid var(--accent,#7c3aed);border-radius:6px;padding:14px 16px;margin-bottom:20px;font-size:0.92rem;line-height:1.6;color:var(--text-primary);">
+               <span style="font-size:0.75rem;font-weight:600;letter-spacing:0.05em;opacity:0.5;display:block;margin-bottom:6px;text-transform:uppercase;">AI Reasoning</span>
+               ${result.nlp_reasoning}
+           </div>`
+        : '';
+
     details.innerHTML = `
         <h2>Promotion Result</h2>
         <div class="stat-card ${decisionClass}" style="margin-bottom:20px;">
             <div class="stat-value">${result.decision}</div>
             <div class="stat-label">${scoreLabel}</div>
         </div>
+        ${reasoningBlock}
         ${icapCard}
         ${riskSection}
     `;
