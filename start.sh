@@ -127,6 +127,23 @@ for i in {1..15}; do
     sleep 1
 done
 
+# ── Public tunnel via ngrok ────────────────────────────────────────────────────
+TUNNEL_URL=""
+NGROK_BIN="${HOME}/.local/bin/ngrok"
+if [[ -x "$NGROK_BIN" ]] && "$NGROK_BIN" config check &>/dev/null; then
+    echo -e "${BLUE}[+] Starting ngrok tunnel...${NC}"
+    "$NGROK_BIN" http 8000 --domain=sleepiest-tautologously-grace.ngrok-free.dev --log=stdout --log-format=json \
+        > /tmp/capslock-ngrok.log 2>&1 &
+    PIDS+=($!)
+    # Wait up to 10s for the public URL
+    for i in {1..10}; do
+        TUNNEL_URL=$(grep -oP '"url":"https://[^"]+' /tmp/capslock-ngrok.log 2>/dev/null \
+            | head -1 | grep -oP 'https://.*' || true)
+        [[ -n "$TUNNEL_URL" ]] && break
+        sleep 1
+    done
+fi
+
 # ── Ready ─────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
@@ -135,6 +152,9 @@ echo -e "${GREEN}╠════════════════════
 echo -e "${GREEN}║  CAPSLOCK         →  http://localhost:8000   ║${NC}"
 echo -e "${GREEN}║  Policy Engine    →  http://localhost:8001   ║${NC}"
 echo -e "${GREEN}║  SSDLB controller →  http://localhost:8082   ║${NC}"
+if [[ -n "$TUNNEL_URL" ]]; then
+echo -e "${GREEN}║  Public URL       →  ${TUNNEL_URL}  ║${NC}"
+fi
 echo -e "${GREEN}╠══════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║  Logs: /tmp/capslock-*.log                   ║${NC}"
 echo -e "${GREEN}║  Press Ctrl+C to stop                        ║${NC}"
