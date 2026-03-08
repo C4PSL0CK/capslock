@@ -1009,22 +1009,52 @@ _PE_NAMESPACE_FALLBACK = [
 ]
 
 
+def _namespaces_from_promotions() -> list:
+    """Build a namespace list from actual promotions in promotions_db.
+
+    Each unique application_namespace gets one entry, with environment and
+    policy inferred from the most recent promotion's target_environment.
+    """
+    seen: dict = {}
+    for p in promotions_db.values():
+        ns = getattr(p.spec.application, "namespace", None)
+        if not ns:
+            continue
+        target = (p.spec.target_environment or "").lower()
+        info = _infer_ns_policy(target) if target else _infer_ns_policy(ns)
+        # Use highest-confidence entry when duplicates exist
+        if ns not in seen or info["enforcement"] == "strict":
+            seen[ns] = {
+                "namespace": ns,
+                "environment": info["environment"],
+                "policy": info["policy"],
+                "confidence": 0.85 if target else 0.60,
+            }
+    return list(seen.values())
+
+
 @app.get("/api/policy-engine/namespaces")
 async def pe_namespaces():
     if not POLICY_ENGINE_URL:
-        return _PE_NAMESPACE_FALLBACK
+        # Merge promotion-derived namespaces with the static fallback
+        promo_ns = _namespaces_from_promotions()
+        promo_keys = {e["namespace"] for e in promo_ns}
+        extra = [e for e in _PE_NAMESPACE_FALLBACK if e["namespace"] not in promo_keys]
+        return promo_ns + extra
     try:
         async with httpx.AsyncClient() as client:
             r = await client.get(f"{POLICY_ENGINE_URL}/api/namespaces", timeout=5.0)
             data = r.json()
-            # Normalise: unwrap {"namespaces": [...]} or return as-is if already a list
             if isinstance(data, list):
                 return data
             if isinstance(data, dict):
                 return data.get("namespaces", _PE_NAMESPACE_FALLBACK)
     except Exception:
         pass
-    return _PE_NAMESPACE_FALLBACK
+    promo_ns = _namespaces_from_promotions()
+    promo_keys = {e["namespace"] for e in promo_ns}
+    extra = [e for e in _PE_NAMESPACE_FALLBACK if e["namespace"] not in promo_keys]
+    return promo_ns + extra
 
 
 _PE_POLICIES_FALLBACK = [
