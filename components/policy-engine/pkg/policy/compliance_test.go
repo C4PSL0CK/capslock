@@ -2,29 +2,29 @@ package policy
 
 import "testing"
 
-func TestGetComplianceRequirements_ISO27001(t *testing.T) {
-    req := GetComplianceRequirements("iso27001")
-    
+func TestGetComplianceRequirements_PCIDSS(t *testing.T) {
+    req := GetComplianceRequirements("pci-dss")
+
     if req == nil {
-        t.Fatal("Expected ISO 27001 requirements, got nil")
+        t.Fatal("Expected PCI-DSS requirements, got nil")
     }
-    
-    if req.Standard != ComplianceISO27001 {
-        t.Errorf("Expected ISO27001 standard, got %s", req.Standard)
+
+    if req.Standard != CompliancePCIDSS {
+        t.Errorf("Expected PCI-DSS standard, got %s", req.Standard)
     }
-    
+
     if !req.RequiresEncryption {
-        t.Error("ISO 27001 should require encryption")
+        t.Error("PCI-DSS should require encryption")
     }
-    
+
     if !req.RequiresAuditLogging {
-        t.Error("ISO 27001 should require audit logging")
+        t.Error("PCI-DSS should require audit logging")
     }
 }
 
 func TestGetComplianceRequirements_AllStandards(t *testing.T) {
-    standards := []string{"iso27001", "soc2", "cis", "pci-dss"}
-    
+    standards := []string{"cis", "pci-dss"}
+
     for _, standard := range standards {
         req := GetComplianceRequirements(standard)
         if req == nil {
@@ -34,10 +34,10 @@ func TestGetComplianceRequirements_AllStandards(t *testing.T) {
 }
 
 func TestGetStrictestScanningMode(t *testing.T) {
-    reqs := GetAllComplianceRequirements([]string{"iso27001", "soc2", "pci-dss"})
-    
+    reqs := GetAllComplianceRequirements([]string{"cis", "pci-dss"})
+
     strictest := GetStrictestScanningMode(reqs)
-    
+
     // PCI-DSS requires "block", which is strictest
     if strictest != "block" {
         t.Errorf("Expected 'block' as strictest mode, got '%s'", strictest)
@@ -45,10 +45,10 @@ func TestGetStrictestScanningMode(t *testing.T) {
 }
 
 func TestGetSmallestMaxFileSize(t *testing.T) {
-    reqs := GetAllComplianceRequirements([]string{"iso27001", "pci-dss"})
-    
+    reqs := GetAllComplianceRequirements([]string{"cis", "pci-dss"})
+
     smallest := GetSmallestMaxFileSize(reqs)
-    
+
     // PCI-DSS has 25MB which is smallest
     if smallest != "25MB" {
         t.Errorf("Expected '25MB' as smallest, got '%s'", smallest)

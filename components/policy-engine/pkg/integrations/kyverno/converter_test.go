@@ -60,7 +60,7 @@ func TestConvertPolicy_ProdPolicy(t *testing.T) {
 			ScanningMode: "block",
 		},
 		ComplianceConfig: policy.ComplianceConfig{
-			Standards: []string{"pci-dss", "soc2"},
+			Standards: []string{"pci-dss", "cis"},
 		},
 	}
 

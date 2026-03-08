@@ -102,7 +102,7 @@ func TestSelectPolicy_StagingEnvironment(t *testing.T) {
 		EnvironmentType:        EnvironmentStaging,
 		SecurityLevel:          SecurityLevelMedium,
 		RiskTolerance:          "medium",
-		ComplianceRequirements: []string{"iso27001", "soc2"},
+		ComplianceRequirements: []string{"cis", "pci-dss"},
 		Confidence:             0.92,
 	}
 
@@ -134,7 +134,7 @@ func TestSelectPolicy_ProdEnvironment(t *testing.T) {
 		EnvironmentType:        EnvironmentProd,
 		SecurityLevel:          SecurityLevelHigh,
 		RiskTolerance:          "low",
-		ComplianceRequirements: []string{"iso27001", "soc2", "pci-dss"},
+		ComplianceRequirements: []string{"cis", "pci-dss", "pci-dss"},
 		Confidence:             0.98,
 	}
 
@@ -285,11 +285,11 @@ func TestCalculateComplianceFit(t *testing.T) {
 
 	// All requirements met
 	envCtx := &EnvironmentContext{
-		ComplianceRequirements: []string{"iso27001", "soc2"},
+		ComplianceRequirements: []string{"cis", "pci-dss"},
 	}
 	template := &PolicyTemplate{
 		ComplianceConfig: ComplianceConfig{
-			Standards: []string{"iso27001", "soc2", "pci-dss"},
+			Standards: []string{"cis", "pci-dss", "pci-dss"},
 		},
 	}
 
@@ -300,11 +300,11 @@ func TestCalculateComplianceFit(t *testing.T) {
 
 	// Partial match
 	envCtx2 := &EnvironmentContext{
-		ComplianceRequirements: []string{"iso27001", "soc2", "cis"},
+		ComplianceRequirements: []string{"cis", "pci-dss", "cis"},
 	}
 	template2 := &PolicyTemplate{
 		ComplianceConfig: ComplianceConfig{
-			Standards: []string{"iso27001"},
+			Standards: []string{"pci-dss"},
 		},
 	}
 

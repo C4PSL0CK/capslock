@@ -500,7 +500,7 @@ func TestDetectConflicts_Compliance(t *testing.T) {
 			Name:        "policy2",
 			Environment: policy.EnvironmentProd,
 			ComplianceConfig: policy.ComplianceConfig{
-				Standards: []string{"pci-dss", "soc2"},
+				Standards: []string{"pci-dss", "cis"},
 			},
 		},
 	}
@@ -584,7 +584,7 @@ func TestDetectConflicts_MultipleConflicts(t *testing.T) {
 				MaxFileSize:  "25MB",
 			},
 			ComplianceConfig: policy.ComplianceConfig{
-				Standards: []string{"pci-dss", "soc2"},
+				Standards: []string{"pci-dss", "cis"},
 			},
 		},
 	}

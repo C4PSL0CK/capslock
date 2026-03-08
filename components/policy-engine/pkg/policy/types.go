@@ -135,7 +135,7 @@ type ResourcesConfig struct {
 
 // ComplianceConfig defines compliance framework requirements
 type ComplianceConfig struct {
-	Standards []string `yaml:"standards" json:"standards"` // cis, pci-dss, soc2, iso27001
+	Standards []string `yaml:"standards" json:"standards"` // cis, pci-dss
 }
 
 // LoadPolicyTemplates loads all policy templates from the templates directory

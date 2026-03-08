@@ -66,7 +66,7 @@ func TestConvertPolicy_ProdPolicy(t *testing.T) {
 			MaxFileSize:  "50MB",
 		},
 		ComplianceConfig: policy.ComplianceConfig{
-			Standards: []string{"pci-dss", "soc2"},
+			Standards: []string{"pci-dss", "cis"},
 		},
 	}
 
@@ -162,7 +162,7 @@ func TestGenerateRegoPolicy_WithCompliance(t *testing.T) {
 			ScanningMode: "block",
 		},
 		ComplianceConfig: policy.ComplianceConfig{
-			Standards: []string{"pci-dss", "soc2"},
+			Standards: []string{"pci-dss", "cis"},
 		},
 	}
 
@@ -172,8 +172,8 @@ func TestGenerateRegoPolicy_WithCompliance(t *testing.T) {
 		t.Error("Rego should contain PCI-DSS compliance rule")
 	}
 
-	if !strings.Contains(rego, "SOC2") {
-		t.Error("Rego should contain SOC2 compliance rule")
+	if !strings.Contains(rego, "PCI-DSS") {
+		t.Error("Rego should contain PCI-DSS compliance rule")
 	}
 }
 

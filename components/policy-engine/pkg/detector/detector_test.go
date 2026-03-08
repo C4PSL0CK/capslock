@@ -249,7 +249,7 @@ func TestDetect_ProdEnvironmentWithCompliance(t *testing.T) {
 				Labels: map[string]string{
 					"environment":        "prod",
 					"security-level":     "high",
-					"compliance-soc2":    "true",
+					"compliance-cis":     "true",
 					"compliance-pci-dss": "true",
 				},
 			},
@@ -283,19 +283,19 @@ func TestDetect_ProdEnvironmentWithCompliance(t *testing.T) {
 		t.Errorf("Expected 2 compliance requirements, got %d", len(envCtx.ComplianceRequirements))
 	}
 
-	hasSOC2 := false
+	hasCIS := false
 	hasPCIDSS := false
 	for _, req := range envCtx.ComplianceRequirements {
-		if req == "soc2" {
-			hasSOC2 = true
+		if req == "cis" {
+			hasCIS = true
 		}
 		if req == "pci-dss" {
 			hasPCIDSS = true
 		}
 	}
 
-	if !hasSOC2 {
-		t.Error("Expected soc2 compliance requirement")
+	if !hasCIS {
+		t.Error("Expected cis compliance requirement")
 	}
 	if !hasPCIDSS {
 		t.Error("Expected pci-dss compliance requirement")
@@ -372,8 +372,8 @@ func TestDetect_MultipleComplianceStandards(t *testing.T) {
 				Name: "multi-compliance",
 				Labels: map[string]string{
 					"environment":         "prod",
-					"compliance-iso27001": "true",
-					"compliance-soc2":     "true",
+					"compliance-pci-dss": "true",
+					"compliance-cis":     "true",
 					"compliance-cis":      "true",
 					"compliance-pci-dss":  "true",
 				},
@@ -392,7 +392,7 @@ func TestDetect_MultipleComplianceStandards(t *testing.T) {
 	}
 
 	// Should have all 4 compliance standards
-	expectedStandards := []string{"iso27001", "soc2", "cis", "pci-dss"}
+	expectedStandards := []string{"cis", "pci-dss"}
 	if len(envCtx.ComplianceRequirements) != 4 {
 		t.Errorf("Expected 4 compliance standards, got %d", len(envCtx.ComplianceRequirements))
 	}
@@ -418,7 +418,7 @@ func TestDetect_ComplianceStringParsing(t *testing.T) {
 				Name: "compliance-string",
 				Labels: map[string]string{
 					"environment": "prod",
-					"compliance":  "iso27001, soc2, pci-dss, cis",
+					"compliance":  "pci-dss, cis",
 				},
 			},
 		},
@@ -493,8 +493,8 @@ func TestCalculateConfidence_PerfectLabels(t *testing.T) {
 				Labels: map[string]string{
 					"environment":         "prod",
 					"security-level":      "high",
-					"compliance-iso27001": "true",
-					"compliance-soc2":     "true",
+					"compliance-pci-dss": "true",
+					"compliance-cis":     "true",
 				},
 			},
 		},
@@ -521,18 +521,18 @@ func TestCalculateConfidence_PerfectLabels(t *testing.T) {
 		t.Errorf("Expected SecurityLevelHigh, got %s", envCtx.SecurityLevel)
 	}
 
-	hasISO := false
-	hasSOC2 := false
+	hasPCI := false
+	hasCIS := false
 	for _, req := range envCtx.ComplianceRequirements {
-		if req == "iso27001" {
-			hasISO = true
+		if req == "pci-dss" {
+			hasPCI = true
 		}
-		if req == "soc2" {
-			hasSOC2 = true
+		if req == "cis" {
+			hasCIS = true
 		}
 	}
-	if !hasISO || !hasSOC2 {
-		t.Error("Expected iso27001 and soc2 compliance requirements")
+	if !hasPCI || !hasCIS {
+		t.Error("Expected pci-dss and cis compliance requirements")
 	}
 }
 

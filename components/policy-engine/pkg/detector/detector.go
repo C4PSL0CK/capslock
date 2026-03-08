@@ -57,8 +57,7 @@ func (d *Detector) calculateEnvironmentWithConfidence(labels map[string]string, 
 		"env":                    0.20,
 		"tier":                   0.15,
 		"security-level":         0.10,
-		"compliance-pci-dss":     0.02,
-		"compliance-soc2":        0.02,
+		"compliance-pci-dss":     0.04,
 		"namespace-name-pattern": 0.01,
 	}
 
@@ -112,15 +111,7 @@ func (d *Detector) calculateEnvironmentWithConfidence(labels map[string]string, 
 		scores["prod"] += weights["compliance-pci-dss"]
 	}
 
-	// Factor 6: SOC2 compliance (weight: 0.02)
-	if _, ok := labels["compliance-soc2"]; ok {
-		scores["prod"] += weights["compliance-soc2"]
-	}
-	if soc2, ok := labels["soc2"]; ok && strings.ToLower(soc2) == "true" {
-		scores["prod"] += weights["compliance-soc2"]
-	}
-
-	// Factor 7: Namespace name pattern (weight: 0.01)
+	// Factor 6: Namespace name pattern (weight: 0.01)
 	lowerName := strings.ToLower(namespaceName)
 	if strings.Contains(lowerName, "prod") || strings.Contains(lowerName, "production") {
 		scores["prod"] += weights["namespace-name-pattern"]

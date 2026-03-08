@@ -155,7 +155,7 @@ Select the best policy for given environment context.
 {
   "environment": "prod",
   "confidence": 0.95,
-  "compliance_requirements": ["pci-dss", "soc2"],
+  "compliance_requirements": ["pci-dss", "cis"],
   "risk_tolerance": "low"
 }
 ```
@@ -221,7 +221,7 @@ Detect conflicts between multiple policies.
       "policies": ["dev-policy", "prod-policy"],
       "details": {
         "dev-policy": [],
-        "prod-policy": ["pci-dss", "soc2"]
+        "prod-policy": ["pci-dss", "cis"]
       }
     }
   ],

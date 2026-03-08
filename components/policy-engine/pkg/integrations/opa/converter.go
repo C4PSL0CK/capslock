@@ -201,13 +201,8 @@ exceeds_limit(value, limit) {
 }
 
 `)
-		case "soc2":
-			rego.WriteString(`violation[{"msg": msg}] {
-  not input.review.object.metadata.labels["data-classification"]
-  msg := "Pod must have data-classification label (SOC2 requirement)"
-}
-
-`)
+		case "cis":
+			// CIS rules are covered by the base security context rules above
 		}
 	}
 

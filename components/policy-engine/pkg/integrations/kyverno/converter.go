@@ -91,10 +91,10 @@ func (kc *KyvernoConverter) generateRules(p *policy.PolicyTemplate) []Rule {
 		switch standard {
 		case "pci-dss":
 			rules = append(rules, kc.generatePCIDSSRule(p))
-		case "soc2":
-			rules = append(rules, kc.generateSOC2Rule(p))
-		case "iso27001":
-			rules = append(rules, kc.generateISO27001Rule(p))
+			rules = append(rules, kc.generatePCIDSSNoPrivEscalationRule(p))
+			rules = append(rules, kc.generatePCIDSSDataClassificationRule(p))
+		case "cis":
+			// CIS rules are covered by the base security context rule
 		}
 	}
 
@@ -205,10 +205,10 @@ func (kc *KyvernoConverter) generatePCIDSSRule(p *policy.PolicyTemplate) Rule {
 	}
 }
 
-// generateSOC2Rule creates a SOC2 compliance rule
-func (kc *KyvernoConverter) generateSOC2Rule(p *policy.PolicyTemplate) Rule {
+// generatePCIDSSDataClassificationRule creates a PCI-DSS data classification rule
+func (kc *KyvernoConverter) generatePCIDSSDataClassificationRule(p *policy.PolicyTemplate) Rule {
 	return Rule{
-		Name: "soc2-require-data-classification",
+		Name: "pcidss-data-classification",
 		Match: MatchResources{
 			Any: []ResourceFilter{
 				{
@@ -219,7 +219,7 @@ func (kc *KyvernoConverter) generateSOC2Rule(p *policy.PolicyTemplate) Rule {
 			},
 		},
 		Validate: &Validation{
-			Message: "Pod must have data-classification label (SOC2 requirement)",
+			Message: "Pod must have data-classification label (PCI-DSS requirement)",
 			Pattern: map[string]interface{}{
 				"metadata": map[string]interface{}{
 					"labels": map[string]interface{}{
@@ -231,10 +231,10 @@ func (kc *KyvernoConverter) generateSOC2Rule(p *policy.PolicyTemplate) Rule {
 	}
 }
 
-// generateISO27001Rule creates an ISO27001 compliance rule
-func (kc *KyvernoConverter) generateISO27001Rule(p *policy.PolicyTemplate) Rule {
+// generatePCIDSSNoPrivEscalationRule creates a PCI-DSS privilege escalation rule
+func (kc *KyvernoConverter) generatePCIDSSNoPrivEscalationRule(p *policy.PolicyTemplate) Rule {
 	return Rule{
-		Name: "iso27001-security-context",
+		Name: "pcidss-no-privilege-escalation",
 		Match: MatchResources{
 			Any: []ResourceFilter{
 				{
@@ -245,7 +245,7 @@ func (kc *KyvernoConverter) generateISO27001Rule(p *policy.PolicyTemplate) Rule 
 			},
 		},
 		Validate: &Validation{
-			Message: "Container must not run with privilege escalation (ISO27001)",
+			Message: "Container must not run with privilege escalation (PCI-DSS 2.2.4)",
 			Pattern: map[string]interface{}{
 				"spec": map[string]interface{}{
 					"containers": []interface{}{

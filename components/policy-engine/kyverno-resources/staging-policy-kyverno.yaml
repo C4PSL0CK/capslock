@@ -45,27 +45,27 @@ spec:
                         - resources:
                             limits:
                                 ephemeral-storage: ?(<=100Mi)
-        - name: iso27001-security-context
+        - name: pcidss-no-privilege-escalation
           match:
             any:
                 - resources:
                     kinds:
                         - Pod
           validate:
-            message: Container must not run with privilege escalation (ISO27001)
+            message: Container must not run with privilege escalation (PCI-DSS 2.2.4)
             pattern:
                 spec:
                     containers:
                         - securityContext:
                             allowPrivilegeEscalation: false
-        - name: soc2-require-data-classification
+        - name: pcidss-data-classification
           match:
             any:
                 - resources:
                     kinds:
                         - Pod
           validate:
-            message: Pod must have data-classification label (SOC2 requirement)
+            message: Pod must have data-classification label (PCI-DSS requirement)
             pattern:
                 metadata:
                     labels:

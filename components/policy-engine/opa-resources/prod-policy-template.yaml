@@ -48,7 +48,7 @@ spec:
 
             violation[{"msg": msg}] {
               not input.review.object.metadata.labels["data-classification"]
-              msg := "Pod must have data-classification label (SOC2 requirement)"
+              msg := "Pod must have data-classification label (PCI-DSS requirement)"
             }
 
             violation[{"msg": msg}] {
