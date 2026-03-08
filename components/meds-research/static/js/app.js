@@ -767,8 +767,6 @@ document.getElementById('conflict-form').addEventListener('submit', async (e) =>
     const stds = [];
     if (document.getElementById('cf-pci').checked)  stds.push('pci-dss');
     if (document.getElementById('cf-cis').checked)  stds.push('cis');
-    if (document.getElementById('cf-soc2').checked) stds.push('soc2');
-    if (document.getElementById('cf-iso').checked)  stds.push('iso27001');
 
     const body = {
         name: 'policy-under-test',

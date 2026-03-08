@@ -1180,7 +1180,7 @@ ICAP (Internet Content Adaptation Protocol) scanning runs on every deployment:
 - Modes: block (default), warn, log-only
 - Health score 0-100 weighted: readiness 25%, latency 25%, signature freshness 20%, error rate 15%, resources 10%, queue 5%
 
-Supported compliance frameworks: CIS Kubernetes, PCI-DSS, SOC2, ISO 27001
+Supported compliance frameworks: CIS Kubernetes, PCI-DSS
 
 You can help by:
 1. Answering questions about promotions, risk scores, audit events — use the data tools

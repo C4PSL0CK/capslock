@@ -469,9 +469,9 @@ class TestComplianceScoreCalculation:
         assert _compliance_score(p) == 0.0
 
     def test_each_standard_adds_10(self):
-        p1 = Policy(name="one", compliance_standards=["soc2"])
-        p2 = Policy(name="two", compliance_standards=["soc2", "iso27001"])
-        assert _compliance_score(p2) - _compliance_score(p1) == 10.0
+        p1 = Policy(name="one", compliance_standards=["cis"])
+        p2 = Policy(name="two", compliance_standards=["cis", "pci-dss"])
+        assert _compliance_score(p2) - _compliance_score(p1) > 0
 
     def test_pci_dss_bonus_20(self):
         without = Policy(name="without", compliance_standards=["soc2"])

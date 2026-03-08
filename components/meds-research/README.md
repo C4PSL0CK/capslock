@@ -46,7 +46,7 @@ meds-research/
 │   ├── validation/
 │   │   └── risk_scorer.py   # 4-factor risk scoring engine
 │   ├── policy/
-│   │   ├── standards.py     # Policy catalog (CIS, PCI-DSS, SOC2, ISO 27001)
+│   │   ├── standards.py     # Policy catalog (CIS, PCI-DSS)
 │   │   └── version_store.py # Per-environment version history
 │   ├── icap/
 │   │   └── scanner.py       # 3-layer ICAP scanner with TTL cache

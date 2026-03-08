@@ -93,7 +93,7 @@ List all available policy templates.
       "environment": "prod",
       "scanning_mode": "block",
       "max_file_size": "25MB",
-      "compliance_standards": ["pci-dss", "soc2", "iso27001", "cis"]
+      "compliance_standards": ["pci-dss", "cis"]
     }
   ],
   "total": 3
@@ -132,7 +132,7 @@ Get a specific policy template by name.
     "timeout_seconds": 30
   },
   "compliance_config": {
-    "standards": ["pci-dss", "soc2", "iso27001", "cis"],
+    "standards": ["pci-dss", "cis"],
     "audit_logging": true,
     "data_retention_days": 90
   }

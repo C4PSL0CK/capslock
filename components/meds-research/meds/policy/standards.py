@@ -5,8 +5,6 @@ from dataclasses import dataclass
 class ComplianceFramework(Enum):
     CIS_KUBERNETES = "CIS Kubernetes Benchmark"
     PCI_DSS = "PCI DSS v4.0"
-    SOC2 = "SOC 2 Type II"
-    ISO27001 = "ISO/IEC 27001:2022"
 
 @dataclass
 class PolicyDefinition:
@@ -18,7 +16,7 @@ class PolicyDefinition:
     required_for: List[str]
 
 POLICY_CATALOG = {
-    # ── Network Security ──────────────────────────────────────────────────────
+    # Network Security
     "network-segmentation": PolicyDefinition(
         name="network-segmentation",
         description="Enforce network segmentation between pods",
@@ -47,7 +45,6 @@ POLICY_CATALOG = {
         category="Network Security",
         compliance_mappings={
             ComplianceFramework.PCI_DSS: ["4.2.1"],
-            ComplianceFramework.SOC2: ["CC6.7"],
         },
         severity="critical",
         required_for=["staging", "production"]
@@ -58,13 +55,12 @@ POLICY_CATALOG = {
         category="Network Security",
         compliance_mappings={
             ComplianceFramework.PCI_DSS: ["4.2.1"],
-            ComplianceFramework.ISO27001: ["A.10.1"],
         },
         severity="critical",
         required_for=["production"]
     ),
 
-    # ── Pod Security ──────────────────────────────────────────────────────────
+    # Pod Security
     "pod-security-standards": PolicyDefinition(
         name="pod-security-standards",
         description="Enforce Kubernetes Pod Security Standards (restricted profile)",
@@ -108,10 +104,10 @@ POLICY_CATALOG = {
         required_for=["staging", "production"]
     ),
 
-    # ── Access Control ────────────────────────────────────────────────────────
+    # Access Control
     "rbac-least-privilege": PolicyDefinition(
         name="rbac-least-privilege",
-        description="Enforce RBAC least-privilege — no wildcard verbs or resources",
+        description="Enforce RBAC least-privilege, no wildcard verbs or resources",
         category="Access Control",
         compliance_mappings={
             ComplianceFramework.CIS_KUBERNETES: ["5.1.1"],
@@ -126,13 +122,12 @@ POLICY_CATALOG = {
         category="Access Control",
         compliance_mappings={
             ComplianceFramework.CIS_KUBERNETES: ["5.7.1"],
-            ComplianceFramework.SOC2: ["CC6.3"],
         },
         severity="medium",
         required_for=["staging", "production"]
     ),
 
-    # ── Supply Chain Security ─────────────────────────────────────────────────
+    # Supply Chain Security
     "image-scanning": PolicyDefinition(
         name="image-scanning",
         description="Require vulnerability-scanned container images (no HIGH/CRITICAL CVEs)",
@@ -150,13 +145,12 @@ POLICY_CATALOG = {
         category="Supply Chain Security",
         compliance_mappings={
             ComplianceFramework.CIS_KUBERNETES: ["5.2.4"],
-            ComplianceFramework.SOC2: ["CC8.1"],
         },
         severity="high",
         required_for=["staging", "production"]
     ),
 
-    # ── Encryption ────────────────────────────────────────────────────────────
+    # Encryption
     "secrets-encryption": PolicyDefinition(
         name="secrets-encryption",
         description="Encrypt Kubernetes Secrets at rest using KMS provider",
@@ -173,13 +167,12 @@ POLICY_CATALOG = {
         category="Encryption",
         compliance_mappings={
             ComplianceFramework.PCI_DSS: ["8.3.9"],
-            ComplianceFramework.SOC2: ["CC6.1"],
         },
         severity="high",
         required_for=["production"]
     ),
 
-    # ── Resource Management ───────────────────────────────────────────────────
+    # Resource Management
     "resource-limits": PolicyDefinition(
         name="resource-limits",
         description="Enforce CPU and memory resource requests and limits on all containers",
@@ -191,7 +184,7 @@ POLICY_CATALOG = {
         required_for=["development", "staging", "production"]
     ),
 
-    # ── Logging & Monitoring ──────────────────────────────────────────────────
+    # Logging & Monitoring
     "audit-logging": PolicyDefinition(
         name="audit-logging",
         description="Enable Kubernetes API server audit logging",
@@ -208,7 +201,6 @@ POLICY_CATALOG = {
         category="Logging",
         compliance_mappings={
             ComplianceFramework.PCI_DSS: ["10.5.1"],
-            ComplianceFramework.SOC2: ["CC7.2"],
         },
         severity="medium",
         required_for=["development", "staging", "production"]
