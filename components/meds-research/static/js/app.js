@@ -1292,7 +1292,7 @@ async function loadLBState() {
         ]);
         const d = await stateRes.json();
         if (d.error) {
-            el.innerHTML = `<p style="color:var(--danger);padding:12px">SLDB offline: ${d.error}</p>`;
+            el.innerHTML = `<p style="color:var(--danger);padding:12px">SDLB offline: ${d.error}</p>`;
             return;
         }
         const health = healthRes.ok ? await healthRes.json() : {};
@@ -1354,7 +1354,7 @@ async function loadLBTrend() {
         const res = await fetch(`${API_BASE}/ssdlb/trend`);
         const d   = await res.json();
         if (d.error && !d.mode) {
-            el.innerHTML = `<p style="color:var(--danger);padding:12px">SLDB offline: ${d.error}</p>`;
+            el.innerHTML = `<p style="color:var(--danger);padding:12px">SDLB offline: ${d.error}</p>`;
             return;
         }
 
@@ -1475,7 +1475,7 @@ async function loadSystemStatus() {
             { key: 'meds',          label: 'MEDS' },
             { key: 'policy_engine', label: 'Policy Engine' },
             { key: 'icap_operator', label: 'ICAP Operator' },
-            { key: 'ssdlb',         label: 'SLDB' },
+            { key: 'ssdlb',         label: 'SDLB' },
         ];
 
         el.innerHTML = order.map(c => {
