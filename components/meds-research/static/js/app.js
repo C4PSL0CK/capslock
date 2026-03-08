@@ -270,7 +270,12 @@ function showResult(result) {
 
     // Build ICAP card
     let icapClass, icapIcon, icapStatusText, icapStatusColor;
-    if (icap.threat_found) {
+    if (!icap) {
+        icapClass = 'warning';
+        icapIcon = ICONS.alertTriangle;
+        icapStatusText = 'ICAP unavailable';
+        icapStatusColor = '#f59e0b';
+    } else if (icap.threat_found) {
         icapClass = 'threat';
         icapIcon = ICONS.shieldAlert;
         icapStatusText = `Threat detected: ${icap.threat_type}`;
@@ -287,7 +292,8 @@ function showResult(result) {
         icapStatusColor = '#10b981';
     }
 
-    const coverageFillClass = icap.coverage_score >= 75 ? 'coverage-good' : 'coverage-warn';
+    const coverageScore = icap ? icap.coverage_score : 0;
+    const coverageFillClass = coverageScore >= 75 ? 'coverage-good' : 'coverage-warn';
 
     const icapCard = `
         <div class="icap-card ${icapClass}">
@@ -297,9 +303,9 @@ function showResult(result) {
             </div>
             <div class="icap-status" style="color:${icapStatusColor}">${icapStatusText}</div>
             <div class="icap-coverage-row">
-                <span class="icap-coverage-label">Coverage: ${icap.coverage_score}/100</span>
+                <span class="icap-coverage-label">Coverage: ${coverageScore}/100</span>
                 <div class="coverage-bar">
-                    <div class="coverage-fill ${coverageFillClass}" style="width:${icap.coverage_score}%"></div>
+                    <div class="coverage-fill ${coverageFillClass}" style="width:${coverageScore}%"></div>
                 </div>
             </div>
         </div>
@@ -323,7 +329,7 @@ function showResult(result) {
         riskSection = `<p class="result-message">${result.message}</p>`;
     }
 
-    const scoreLabel = icap.threat_found
+    const scoreLabel = icap && icap.threat_found
         ? 'ICAP rejection: risk score not computed'
         : `Risk score: ${result.risk_score} / ${result.max_allowed}`;
 
