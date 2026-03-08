@@ -87,7 +87,7 @@ func (kc *KyvernoConverter) generateRules(p *policy.PolicyTemplate) []Rule {
 	}
 
 	// Add compliance-specific rules
-	for _, standard := range p.ComplianceConfig.Standards {
+	for _, standard := range p.Compliance.Standards {
 		switch standard {
 		case "pci-dss":
 			rules = append(rules, kc.generatePCIDSSRule(p))

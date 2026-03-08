@@ -191,7 +191,7 @@ exceeds_limit(value, limit) {
 	}
 
 	// Add compliance-specific rules
-	for _, standard := range p.ComplianceConfig.Standards {
+	for _, standard := range p.Compliance.Standards {
 		switch standard {
 		case "pci-dss":
 			rego.WriteString(`violation[{"msg": msg}] {
