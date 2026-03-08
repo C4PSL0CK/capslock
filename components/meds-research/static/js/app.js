@@ -49,6 +49,7 @@ async function loadData() {
         renderPolicies();
         renderPromotions();
         updateStats(analytics);
+        loadApprovals();
 
         // Refresh remove-policies list if a target is already selected
         const targetEnv = document.getElementById('target-env').value;
@@ -147,6 +148,66 @@ function renderPromotions() {
                 }).join('')}
             </tbody>
         </table>`;
+}
+
+// --- Pending Approvals ---
+async function loadApprovals() {
+    try {
+        const res = await fetch(`${API_BASE}/approvals`);
+        const pending = await res.json();
+        const card = document.getElementById('approvals-card');
+        card.style.display = pending.length > 0 ? 'block' : 'none';
+        document.getElementById('approvals-count').textContent = pending.length;
+        document.getElementById('approvals-list').innerHTML = pending.length === 0 ? '' : `
+            <table class="data-table">
+                <thead><tr>
+                    <th>Name</th><th>App</th><th>Route</th><th>Version</th>
+                    <th style="text-align:center">Risk</th><th>Reason</th>
+                    <th style="text-align:center">Actions</th>
+                </tr></thead>
+                <tbody>
+                ${pending.map(p => `
+                    <tr>
+                        <td><code class="mono">${p.name}</code></td>
+                        <td>${p.application}</td>
+                        <td style="opacity:0.7">${p.source} &rarr; ${p.target}</td>
+                        <td><code class="mono">${p.version}</code></td>
+                        <td style="text-align:center;font-weight:700;color:#f59e0b">${p.risk_score}</td>
+                        <td style="font-size:0.8rem;opacity:0.7;max-width:220px">${p.message || ''}</td>
+                        <td style="text-align:center;white-space:nowrap">
+                            <button class="btn btn-primary" style="padding:4px 12px;font-size:0.8rem;margin-right:6px"
+                                onclick="approvePromotion('${p.id}')">Approve</button>
+                            <button class="btn btn-secondary" style="padding:4px 12px;font-size:0.8rem;color:#ef4444;border-color:#ef4444"
+                                onclick="rejectPromotion('${p.id}')">Reject</button>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    } catch (e) {
+        console.error('Failed to load approvals', e);
+    }
+}
+
+async function approvePromotion(id) {
+    const name = prompt('Your name (for the audit log):') || 'operator';
+    if (name === null) return;
+    await fetch(`${API_BASE}/approvals/${id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved_by: name }),
+    });
+    await loadData();
+}
+
+async function rejectPromotion(id) {
+    const reason = prompt('Rejection reason:') || 'Rejected by operator';
+    if (reason === null) return;
+    await fetch(`${API_BASE}/approvals/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+    });
+    await loadData();
 }
 
 function updateStats(analytics) {
@@ -268,7 +329,7 @@ function showResult(result) {
 
     const reasoningBlock = result.nlp_reasoning
         ? `<div style="background:var(--bg-secondary,#1e1e2e);border-left:3px solid var(--accent,#7c3aed);border-radius:6px;padding:14px 16px;margin-bottom:20px;font-size:0.92rem;line-height:1.6;color:var(--text-primary);">
-               <span style="font-size:0.75rem;font-weight:600;letter-spacing:0.05em;opacity:0.5;display:block;margin-bottom:6px;text-transform:uppercase;">AI Reasoning</span>
+               <span style="font-size:0.75rem;font-weight:600;letter-spacing:0.05em;opacity:0.5;display:block;margin-bottom:6px;text-transform:uppercase;">CAPSLOCK Reasoning</span>
                ${result.nlp_reasoning}
            </div>`
         : '';

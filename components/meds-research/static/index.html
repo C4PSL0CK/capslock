@@ -107,6 +107,18 @@
                 </form>
             </div>
 
+            <!-- Pending Approvals -->
+            <div class="card" id="approvals-card" style="display:none;border:1px solid #f59e0b;">
+                <div class="card-header-row">
+                    <h2 style="color:#f59e0b">Pending Approvals <span id="approvals-count" style="font-size:0.85rem;background:#f59e0b22;color:#f59e0b;padding:2px 8px;border-radius:99px;margin-left:8px"></span></h2>
+                    <button class="btn btn-secondary btn-icon" onclick="loadApprovals()">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        Refresh
+                    </button>
+                </div>
+                <div id="approvals-list"></div>
+            </div>
+
             <!-- Recent promotions -->
             <div class="card">
                 <div class="card-header-row">
