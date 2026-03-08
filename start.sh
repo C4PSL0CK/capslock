@@ -80,10 +80,24 @@ else
     echo -e "${YELLOW}[2/5] Skipping icap-operator (no cluster)${NC}"
 fi
 
+# ── Prometheus (port 9090) ────────────────────────────────────────────────────
+PROMETHEUS_BIN="${HOME}/.local/bin/prometheus"
+if [[ -x "$PROMETHEUS_BIN" ]]; then
+    echo -e "${BLUE}[+] Starting Prometheus...${NC}"
+    "$PROMETHEUS_BIN" \
+        --config.file="$ROOT/prometheus.yml" \
+        --storage.tsdb.path="/tmp/capslock-prometheus-data" \
+        --web.listen-address="0.0.0.0:9090" \
+        --log.level=warn \
+        > /tmp/capslock-prometheus.log 2>&1 &
+    PIDS+=($!)
+fi
+
 # ── 3. Start SSDLB (port 8082) ───────────────────────────────────────────────
 echo -e "${BLUE}[3/5] Starting SSDLB controller...${NC}"
 cd "$ROOT/components/ssdlb/controller"
 POLICY_ENGINE_URL=http://localhost:8001 \
+PROMETHEUS_URL=http://localhost:9090 \
 ICAP_HEALTH_SPREAD_THRESHOLD=70 \
 ICAP_INSTANCE_HEALTHY_FLOOR=60 \
     "$UVICORN" main:app --host 0.0.0.0 --port 8082 --log-level warning \
@@ -152,6 +166,7 @@ echo -e "${GREEN}╠════════════════════
 echo -e "${GREEN}║  CAPSLOCK         →  http://localhost:8000   ║${NC}"
 echo -e "${GREEN}║  Policy Engine    →  http://localhost:8001   ║${NC}"
 echo -e "${GREEN}║  SSDLB controller →  http://localhost:8082   ║${NC}"
+echo -e "${GREEN}║  Prometheus       →  http://localhost:9090   ║${NC}"
 if [[ -n "$TUNNEL_URL" ]]; then
 echo -e "${GREEN}║  Public URL       →  ${TUNNEL_URL}  ║${NC}"
 fi
