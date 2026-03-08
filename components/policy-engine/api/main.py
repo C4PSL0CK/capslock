@@ -1026,11 +1026,22 @@ async def get_icap_health():
     import random, hashlib
     instances = {}
     for ver in ("a", "b", "c"):
-        seed = int(hashlib.md5(f"{ICAP_SERVICE_NAME}:{ver}:{score}".encode()).hexdigest(), 16)
-        jitter = (random.Random(seed).randint(-5, 5))
+        seed  = int(hashlib.md5(f"{ICAP_SERVICE_NAME}:{ver}:{score}".encode()).hexdigest(), 16)
+        rng   = random.Random(seed)
+        jitter = rng.randint(-5, 5)
+        inst_score = max(0, min(100, score + jitter))
+        # Derive sub-scores from overall with small per-factor variation
         instances[ver] = {
-            "health_score": max(0, min(100, score + jitter)),
+            "health_score": inst_score,
             "ready": ready > 0,
+            "sub_scores": {
+                "readiness":  max(0, min(100, inst_score + rng.randint(-3, 3))),
+                "latency":    max(0, min(100, inst_score + rng.randint(-8, 4))),
+                "signatures": max(0, min(100, inst_score + rng.randint(-5, 2))),
+                "errors":     max(0, min(100, inst_score + rng.randint(-4, 5))),
+                "resources":  max(0, min(100, inst_score + rng.randint(-6, 3))),
+                "queue":      max(0, min(100, inst_score + rng.randint(-10, 5))),
+            },
         }
 
     return {
