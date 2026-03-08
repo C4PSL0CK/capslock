@@ -14,12 +14,13 @@ import (
 
 // Detector is the main detector that coordinates all analyzers
 type Detector struct {
-	clientset       kubernetes.Interface
-	configExtractor *ConfigExtractor
-	podAnalyzer     *PodAnalyzer
-	rbacAnalyzer    *RBACAnalyzer
-	networkAnalyzer *NetworkAnalyzer
-	secretsAnalyzer *SecretsAnalyzer
+	clientset          kubernetes.Interface
+	configExtractor    *ConfigExtractor
+	podAnalyzer        *PodAnalyzer
+	rbacAnalyzer       *RBACAnalyzer
+	networkAnalyzer    *NetworkAnalyzer
+	secretsAnalyzer    *SecretsAnalyzer
+	clusterDetector    *ClusterCharacteristicDetector
 }
 
 // NewDetector creates a new detector with all analyzers
@@ -31,6 +32,7 @@ func NewDetector(clientset kubernetes.Interface) *Detector {
 		rbacAnalyzer:    NewRBACAnalyzer(clientset),
 		networkAnalyzer: NewNetworkAnalyzer(clientset),
 		secretsAnalyzer: NewSecretsAnalyzer(clientset),
+		clusterDetector: NewClusterCharacteristicDetector(clientset),
 	}
 }
 
@@ -116,18 +118,36 @@ func (d *Detector) ExtractNamespaceConfig(ctx context.Context, namespace string)
 	return d.configExtractor.ExtractNamespaceConfig(ctx, namespace)
 }
 
-// DetectEnvironment detects the environment type from namespace labels
+// DetectClusterCharacteristics returns cloud provider and environment signals
+// derived from node labels and taints.
+func (d *Detector) DetectClusterCharacteristics(ctx context.Context) (*ClusterCharacteristics, error) {
+	return d.clusterDetector.Detect(ctx)
+}
+
+// DetectEnvironment detects the environment type from namespace labels and
+// cluster characteristics (node labels/taints, cloud provider).
 func (d *Detector) DetectEnvironment(ctx context.Context, namespace string) (string, float64, error) {
-	// Get namespace to read labels
 	ns, err := d.clientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 	if err != nil {
 		return "", 0.0, fmt.Errorf("failed to get namespace: %w", err)
 	}
 
-	// Use 7-factor confidence algorithm
-	environment, confidence := d.calculateEnvironmentWithConfidence(ns.Labels, namespace)
+	env, confidence := d.calculateEnvironmentWithConfidence(ns.Labels, namespace)
 
-	return environment, confidence, nil
+	// Factor 7: boost confidence from cluster characteristics
+	cc, _ := d.clusterDetector.Detect(ctx)
+	if cc != nil && cc.SuggestedEnvironment == env && cc.Confidence > 0 {
+		confidence = min1(confidence+cc.Confidence, 1.0)
+	}
+
+	return env, confidence, nil
+}
+
+func min1(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // calculateEnvironmentWithConfidence uses the 7-factor algorithm

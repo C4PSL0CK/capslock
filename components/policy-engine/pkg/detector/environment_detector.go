@@ -78,6 +78,15 @@ func (d *Detector) Detect(ctx context.Context, namespace string) (*policy.Enviro
 	// ─── Compliance requirements ──────────────────────────────────────────────
 	compliance := detectComplianceRequirements(labels)
 
+	// Factor 7: cluster characteristics (node labels / taints / cloud provider)
+	cc, _ := d.clusterDetector.Detect(ctx)
+	if cc != nil && string(envType) == cc.SuggestedEnvironment && cc.Confidence > 0 {
+		confidence += cc.Confidence
+		if confidence > 1.0 {
+			confidence = 1.0
+		}
+	}
+
 	return &policy.EnvironmentContext{
 		Namespace:              namespace,
 		EnvironmentType:        envType,
