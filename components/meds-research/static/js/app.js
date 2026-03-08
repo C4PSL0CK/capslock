@@ -394,7 +394,6 @@ function switchTab(name) {
         loadPEConflictLog();
     } else if (name === 'load-balancer') {
         loadLBState();
-        loadLBTrend();
     } else if (name === 'assistant') {
         document.getElementById('chat-input').focus();
     }
@@ -1348,63 +1347,6 @@ async function loadLBState() {
     }
 }
 
-async function loadLBTrend() {
-    const el = document.getElementById('lb-trend-panel');
-    try {
-        const res = await fetch(`${API_BASE}/ssdlb/trend`);
-        const d   = await res.json();
-        if (d.error && !d.mode) {
-            el.innerHTML = `<p style="color:var(--danger);padding:12px">SDLB offline: ${d.error}</p>`;
-            return;
-        }
-
-        // Note shown when Prometheus is unavailable
-        const note = d._note ? `<p style="font-size:0.78rem;color:var(--text-secondary,#9ca3af);margin-bottom:12px;font-style:italic">ℹ ${d._note}</p>` : '';
-
-        // If we have Prometheus trend data, show growth metrics prominently
-        const hasGrowth = d.short_window_rate !== undefined || d.growth_ratio !== undefined;
-        if (hasGrowth) {
-            const short  = (d.short_window_rate  ?? 0).toFixed(2);
-            const medium = (d.medium_window_rate ?? 0).toFixed(2);
-            const growth = d.growth_ratio !== undefined ? (d.growth_ratio * 100).toFixed(1) : '—';
-            const growthColor = Math.abs(parseFloat(growth)) >= 8 ? '#ef4444'
-                : Math.abs(parseFloat(growth)) >= 3 ? '#f59e0b' : '#10b981';
-            el.innerHTML = `${note}
-                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
-                    <div style="text-align:center;padding:12px;background:var(--bg-secondary);border-radius:8px">
-                        <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px">SHORT (1m) req/s</div>
-                        <div style="font-size:1.2rem;font-weight:700">${short}</div>
-                    </div>
-                    <div style="text-align:center;padding:12px;background:var(--bg-secondary);border-radius:8px">
-                        <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px">MEDIUM (5m) req/s</div>
-                        <div style="font-size:1.2rem;font-weight:700">${medium}</div>
-                    </div>
-                    <div style="text-align:center;padding:12px;background:var(--bg-secondary);border-radius:8px">
-                        <div style="font-size:0.72rem;opacity:0.6;margin-bottom:4px">GROWTH</div>
-                        <div style="font-size:1.2rem;font-weight:700;color:${growthColor}">${growth}%</div>
-                    </div>
-                </div>`;
-        } else {
-            // Fallback: show routing state key/values
-            const entries = Object.entries(d).filter(([k]) => !k.startsWith('_') && !k.includes('error'));
-            if (entries.length === 0) {
-                el.innerHTML = `${note}<p style="opacity:0.5;text-align:center;padding:24px 0">No traffic data yet — Prometheus integration not available.</p>`;
-                return;
-            }
-            const rows = entries.map(([k, v]) => {
-                const label = k.replace(/_/g, ' ');
-                const val = typeof v === 'number' ? (Math.abs(v) < 10 ? v.toFixed(3) : v.toFixed(1)) : String(v);
-                return `<tr style="border-bottom:1px solid var(--border-color,#e5e7eb)">
-                    <td style="padding:7px 10px;opacity:0.65;font-size:0.83rem;text-transform:capitalize">${label}</td>
-                    <td style="padding:7px 10px;font-family:monospace;font-size:0.88rem">${val}</td>
-                </tr>`;
-            }).join('');
-            el.innerHTML = `${note}<table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>`;
-        }
-    } catch (e) {
-        el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
-    }
-}
 
 async function lbSetVersion(version) {
     const el = document.getElementById('lb-override-result');
@@ -1453,7 +1395,6 @@ async function lbAutoRoute() {
                 </tbody>
             </table>`;
         loadLBState();
-        loadLBTrend();
     } catch (e) {
         el.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
     }

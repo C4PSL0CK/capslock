@@ -473,21 +473,13 @@
                 <strong>SDLB</strong> — Smart Service Discovery &amp; Load Balancer. Routes ICAP scanning traffic using health-weighted effective load. Enters spread mode on traffic spikes (≥8% growth) and collapses back to single-instance on recovery (≤3% growth). Forces spread if aggregate ICAP health drops below 70.
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+            <div style="margin-bottom:20px">
                 <div class="card">
                     <div class="card-header-row">
                         <h2>Routing State</h2>
                         <button class="btn btn-secondary" onclick="loadLBState()">Refresh</button>
                     </div>
                     <div id="lb-state-panel"><p class="empty-state">Loading…</p></div>
-                </div>
-
-                <div class="card">
-                    <div class="card-header-row">
-                        <h2>Traffic Trend</h2>
-                        <button class="btn btn-secondary" onclick="loadLBTrend()">Refresh</button>
-                    </div>
-                    <div id="lb-trend-panel"><p class="empty-state">Loading…</p></div>
                 </div>
             </div>
 
