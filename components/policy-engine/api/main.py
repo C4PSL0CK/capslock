@@ -945,9 +945,17 @@ async def get_icap_operator_status():
     Consumed by MEDS, SSDLB, and the dashboard to show ICAP health.
     """
     try:
-        return _get_icap_crd_status()
+        s = _get_icap_crd_status()
     except Exception:
-        return _synthetic_icap_status()
+        s = _synthetic_icap_status()
+
+    # Always override scanning_mode and replicas from local persisted state —
+    # the K8s operator may reconcile the CRD back to its original spec, so the
+    # local state file is the authoritative source of truth for configure changes.
+    local = _load_local_icap_state()
+    s["scanning_mode"] = local["scanning_mode"]
+    s["desired_replicas"] = local["replicas"]
+    return s
 
 
 class IcapConfigureRequest(BaseModel):
