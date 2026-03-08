@@ -11,6 +11,15 @@ import asyncio
 from contextlib import asynccontextmanager
 import httpx
 
+# Load .env file if present so GROQ_API_KEY persists across sessions without
+# needing to export it manually every time.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../../.env"), override=False)
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "../../../../.env"), override=False)
+except ImportError:
+    pass
+
 from pydantic import BaseModel
 from meds.models.promotion import Promotion, Environment, ApplicationRef, PolicyMigration, PromotionSpec
 from meds.models.requests import CreatePromotionRequest, RollbackRequest
@@ -1154,8 +1163,8 @@ async def ssdlb_set_version(version: str):
 # NLP Assistant — Groq integration
 # ---------------------------------------------------------------------------
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 _groq_client = None
+_groq_client_key = ""  # tracks which key the client was built with
 
 _CAPSLOCK_SYSTEM_PROMPT = """You are the CAPSLOCK assistant, an AI helper embedded in the CAPSLOCK \
 Kubernetes deployment management system.
@@ -1333,13 +1342,18 @@ class _ChatRequest(BaseModel):
 @app.post("/api/nlp/chat")
 async def nlp_chat(req: _ChatRequest):
     """Natural-language assistant powered by Groq (llama-3.3-70b-versatile)."""
-    if not GROQ_API_KEY:
+    # Read fresh every request — picks up .env or newly exported vars without restart.
+    groq_api_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_api_key:
         return {
             "reply": (
                 "The CAPSLOCK Assistant requires a Groq API key. "
-                "Get a free key at https://console.groq.com, then start the app with:\n\n"
-                "  export GROQ_API_KEY=gsk_...\n\n"
-                "Restart after setting the variable."
+                "Get a free key at https://console.groq.com, then either:\n\n"
+                "  1. Add it to components/meds-research/.env:\n"
+                "     GROQ_API_KEY=gsk_...\n\n"
+                "  2. Or export it in your shell:\n"
+                "     export GROQ_API_KEY=gsk_...\n\n"
+                "No restart needed — just set the key and send your message again."
             ),
             "action": None,
         }
@@ -1349,9 +1363,10 @@ async def nlp_chat(req: _ChatRequest):
     except ImportError:
         return {"reply": "groq package not installed. Run: pip install groq", "action": None}
 
-    global _groq_client
-    if _groq_client is None:
-        _groq_client = AsyncGroq(api_key=GROQ_API_KEY)
+    global _groq_client, _groq_client_key
+    if _groq_client is None or _groq_client_key != groq_api_key:
+        _groq_client = AsyncGroq(api_key=groq_api_key)
+        _groq_client_key = groq_api_key
 
     messages: List[dict] = [{"role": "system", "content": _CAPSLOCK_SYSTEM_PROMPT}]
     for h in req.history:

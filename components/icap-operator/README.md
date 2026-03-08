@@ -6,7 +6,7 @@
 
 ## Overview
 
-The ICAP Operator manages the full lifecycle of ClamAV-based ICAP (Internet Content Adaptation Protocol) scanning services inside a Kubernetes cluster. It watches a custom `ICAPService` CRD and reconciles the desired state — replicas, scanning mode, ClamAV image version — into running pods and services.
+The ICAP Operator manages the full lifecycle of ClamAV-based ICAP (Internet Content Adaptation Protocol) scanning services inside a Kubernetes cluster. It watches a custom `ICAPService` CRD and reconciles the desired state (replicas, scanning mode, ClamAV image version) into running pods and services.
 
 MEDS uses it as the last line of defence before a deployment reaches production: every artifact is streamed through ClamAV via the ICAP protocol (RFC 3507) and either cleared or blocked based on the configured scanning mode.
 
@@ -41,10 +41,10 @@ spec:
   clamavImage: clamav/clamav:latest
 ```
 
-**Status fields written by the operator:**
-- `readyReplicas` — number of healthy pods
-- `healthScore` — aggregate 0-100 health score
-- `conditions` — standard Kubernetes condition array
+Status fields written by the operator:
+- `readyReplicas`: number of healthy pods
+- `healthScore`: aggregate 0-100 health score
+- `conditions`: standard Kubernetes condition array
 
 ## Health Score Model
 
@@ -65,8 +65,8 @@ Weights shift dynamically under traffic spikes, threat activity, or resource pre
 
 | Mode | Behaviour |
 |------|-----------|
-| `block` | Threat detected → deployment rejected |
-| `warn` | Threat detected → logged, deployment continues |
+| `block` | Threat detected, deployment rejected |
+| `warn` | Threat detected, logged, deployment continues |
 | `log-only` | All scans recorded, no enforcement |
 
 Mode is set via the CRD or the Policy Engine bridge API and persisted locally even when the cluster is unavailable.

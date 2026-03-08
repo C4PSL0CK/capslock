@@ -1,4 +1,4 @@
-# SSDLB — Smarter Service Discovery & Load Balancing
+# SSDLB - Smarter Service Discovery & Load Balancing
 
 **Component 3 of CAPSLOCK** | Go | Port 8082
 
@@ -10,25 +10,25 @@ It also detects traffic spikes predictively and spreads load across all ICAP ins
 
 ## Features
 
-- **ICAP-health-weighted routing** — effective load = actual rate × health penalty
-- **Predictive spread mode** — enters multi-instance mode on early traffic growth signal
-- **Automatic recovery** — collapses back to single-instance routing when traffic stabilises
-- **Force-spread guardrail** — if aggregate ICAP health drops below 70, all instances receive traffic regardless of load distribution
-- **Cooldown protection** — 60s lock after any routing decision to prevent flapping
-- **Minimum improvement threshold** — routing only switches if the new instance is at least 20% better
+- ICAP-health-weighted routing: effective load = actual rate x health penalty
+- Predictive spread mode: enters multi-instance mode on early traffic growth signal
+- Automatic recovery: collapses back to single-instance routing when traffic stabilises
+- Force-spread guardrail: if aggregate ICAP health drops below 70, all instances receive traffic regardless of load distribution
+- Cooldown protection: 60s lock after any routing decision to prevent flapping
+- Minimum improvement threshold: routing only switches if the new instance is at least 20% better
 
 ## Routing Decision Logic
 
 ```
 Every tick:
-  1. If seconds_since_switch < 60s → no_change (cooldown)
-  2. If aggregate_icap_health < 70  → force_spread (health guardrail)
+  1. If seconds_since_switch < 60s -> no_change (cooldown)
+  2. If aggregate_icap_health < 70  -> force_spread (health guardrail)
   3. If mode == spread:
-       If traffic_growth <= 3%      → collapse_to_single (recovered)
-       Else                         → no_change (spread_continue)
+       If traffic_growth <= 3%      -> collapse_to_single (recovered)
+       Else                         -> no_change (spread_continue)
   4. If mode == single:
-       If traffic_growth >= 8%      → enter_spread (spike detected)
-       Else compare weighted rates  → route to best or no_change
+       If traffic_growth >= 8%      -> enter_spread (spike detected)
+       Else compare weighted rates  -> route to best or no_change
 ```
 
 ## Health Penalty Formula
@@ -37,7 +37,7 @@ Every tick:
 effective_load(v) = actual_rate(v)
     if health(v) >= 60 (healthy floor)
 
-effective_load(v) = actual_rate(v) × (1 + 3.0 × (60 − health(v)) / 60)
+effective_load(v) = actual_rate(v) x (1 + 3.0 x (60 - health(v)) / 60)
     if health(v) < 60
 ```
 

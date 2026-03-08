@@ -8,8 +8,8 @@
 
 The Policy Engine has two layers:
 
-1. **Go binary** (`cmd/policy-engine`) — detects Kubernetes environment types, selects and applies policies via OPA Gatekeeper / Kyverno, resolves conflicts between competing policies.
-2. **Python FastAPI bridge** (`api/main.py`) — REST API that MEDS and SSDLB call. Manages ICAP operator CRD state, provides integration endpoints, and persists configuration locally when a K8s cluster is unavailable.
+1. **Go binary** (`cmd/policy-engine`): detects Kubernetes environment types, selects and applies policies via OPA Gatekeeper / Kyverno, resolves conflicts between competing policies.
+2. **Python FastAPI bridge** (`api/main.py`): REST API that MEDS and SSDLB call. Manages ICAP operator CRD state, provides integration endpoints, and persists configuration locally when a K8s cluster is unavailable.
 
 ## Features
 
@@ -17,16 +17,16 @@ The Policy Engine has two layers:
 - Policy conflict detection and resolution (compliance-first, priority, risk-level strategies)
 - OPA Gatekeeper and Kyverno integration
 - ICAP operator CRD management via Kubernetes client
-- **Local state persistence** — scanning mode and replica config saved to `icap_local_state.json`, so changes survive cluster unavailability
-- **Lazy Kubernetes client** — K8s library is only loaded when a cluster is actually reachable, preventing startup delays
+- Local state persistence: scanning mode and replica config saved to `icap_local_state.json`, surviving cluster unavailability
+- Lazy Kubernetes client: only loaded when a cluster is reachable, preventing startup delays
 - REST API for MEDS, SSDLB, and CLI automation
 - 83.6% test coverage on Go code
 
 ## Architecture
 
 ```
-Environment Detection → Policy Selection → Conflict Resolution → Policy Application
-                                                                         ↓
+Environment Detection -> Policy Selection -> Conflict Resolution -> Policy Application
+                                                                         |
                                                                ICAP Operator CRD
                                                                     (K8s or local)
 ```
@@ -130,7 +130,7 @@ K8S_AVAILABLE = None  # None = not yet probed
 
 def _ensure_k8s() -> bool:
     # Tries incluster config, then kubeconfig
-    # Caches result — only probes once per process lifetime
+    # Caches result, only probes once per process lifetime
 ```
 
 This prevents the API from blocking at startup when no cluster is present, and avoids import-time errors from the `kubernetes` library.
@@ -139,9 +139,9 @@ This prevents the API from blocking at startup when no cluster is present, and a
 
 | Strategy | Logic |
 |----------|-------|
-| **Compliance-first** | Policy with the most compliance framework coverage wins |
-| **Priority** | Explicit priority field on policy metadata |
-| **Risk-level** | Lower risk policy preferred |
+| Compliance-first | Policy with the most compliance framework coverage wins |
+| Priority | Explicit priority field on policy metadata |
+| Risk-level | Lower risk policy preferred |
 
 ## Go Testing
 
@@ -200,11 +200,7 @@ go test ./tests/performance/ -bench=. -benchmem
 
 ## Academic Submission
 
-- **Student:** Kaavya
-- **Project:** 25-26J-043
-- **Completion:** 43/43 tasks (100%)
-- **Test Coverage:** 83.6%
-
----
-
-**Last Updated:** March 2026
+- Student: Kaavya
+- Project: 25-26J-043
+- Completion: 43/43 tasks (100%)
+- Test Coverage: 83.6%

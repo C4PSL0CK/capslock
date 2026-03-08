@@ -20,6 +20,9 @@ type HealthMetrics struct {
 	// Timestamp
 	Timestamp time.Time
 
+	// Derived diagnostics emitted to Prometheus
+	SignatureAgeHours float64
+
 	// Context information
 	Context HealthContext
 }

@@ -16,16 +16,19 @@ func CalculateHealth(
 	// Analyze current context
 	context := AnalyzeContext(deployment)
 
+	sigAgeHours := simulatedSignatureAgeHours()
+
 	// Calculate individual component scores
 	metrics := HealthMetrics{
-		ReadinessScore: calculateReadiness(deployment),
-		LatencyScore:   calculateLatency(icapService, context),
-		SignatureScore: calculateSignatureFreshness(),
-		ErrorScore:     calculateErrorHealth(context),
-		ResourceScore:  calculateResourceHealth(deployment),
-		QueueScore:     calculateQueueHealth(deployment, context),
-		Timestamp:      time.Now(),
-		Context:        context,
+		ReadinessScore:    calculateReadiness(deployment),
+		LatencyScore:      calculateLatency(icapService, context),
+		SignatureScore:    signatureFreshnessFromAge(sigAgeHours),
+		ErrorScore:        calculateErrorHealth(context),
+		ResourceScore:     calculateResourceHealth(deployment),
+		QueueScore:        calculateQueueHealth(deployment, context),
+		Timestamp:         time.Now(),
+		SignatureAgeHours: sigAgeHours,
+		Context:           context,
 	}
 
 	// Calculate adaptive weights
@@ -88,22 +91,27 @@ func calculateLatency(icapService *securityv1alpha1.ICAPService, context HealthC
 	return math.Max(0, math.Min(100, baseScore))
 }
 
-// calculateSignatureFreshness checks virus signature age
-func calculateSignatureFreshness() float64 {
-	// Simulate signature age
-	// In production: Query ClamAV for actual signature timestamp
-	simulatedAge := 8 * time.Hour
+// simulatedSignatureAgeHours returns the current ClamAV signature age in hours.
+// In production this would query ClamAV for the actual signature timestamp.
+func simulatedSignatureAgeHours() float64 {
+	return 8.0 // simulated 8-hour-old signatures
+}
 
-	if simulatedAge < 6*time.Hour {
+// signatureFreshnessFromAge converts a signature age (hours) to a 0-100 score.
+func signatureFreshnessFromAge(ageHours float64) float64 {
+	age := time.Duration(ageHours * float64(time.Hour))
+	switch {
+	case age < 6*time.Hour:
 		return 100
-	} else if simulatedAge < 12*time.Hour {
+	case age < 12*time.Hour:
 		return 90
-	} else if simulatedAge < 24*time.Hour {
+	case age < 24*time.Hour:
 		return 75
-	} else if simulatedAge < 48*time.Hour {
+	case age < 48*time.Hour:
 		return 50
+	default:
+		return 25
 	}
-	return 25
 }
 
 // calculateErrorHealth measures scan reliability

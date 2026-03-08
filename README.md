@@ -1,6 +1,6 @@
 # CAPSLOCK
 
-**CAPSLock Security Platform** — cloud-native ICAP content inspection with intelligent deployment management, policy enforcement, and AI-assisted operations.
+**CAPSLock Security Platform** | cloud-native ICAP content inspection with intelligent deployment management, policy enforcement, and AI-assisted operations.
 
 **Project ID:** 25-26J-043
 
@@ -11,14 +11,14 @@ CAPSLOCK is a microservices system that secures Kubernetes deployments through a
 ## Architecture
 
 ```
-Developer → CAPSLOCK Dashboard (MEDS)
-               ↓
+Developer -> CAPSLOCK Dashboard (MEDS)
+               |
          Risk Scorer + ICAP Scanner
-               ↓
-         Policy Engine (Go)  ←→  Kubernetes CRDs
-               ↓
+               |
+         Policy Engine (Go)  <->  Kubernetes CRDs
+               |
          SSDLB (traffic routing)
-               ↓
+               |
          ICAP Operator (ClamAV scanning)
 ```
 
@@ -35,7 +35,7 @@ Developer → CAPSLOCK Dashboard (MEDS)
 
 ```bash
 # 1. Add your Groq API key (free at console.groq.com)
-echo "GROQ_API_KEY=gsk_..." > .env
+echo "GROQ_API_KEY=gsk_..." > components/meds-research/.env
 
 # 2. Start everything
 bash start.sh
@@ -71,7 +71,7 @@ Dashboard: **http://localhost:8000**
 | Configuration complexity | 30% | Version maturity (alpha/beta/rc/stable) |
 | Policy changes | 40% | Number of policies added or removed |
 | Version delta | 20% | Semantic version distance |
-| Environment transition | 10% | Risk of the source→target hop |
+| Environment transition | 10% | Risk of the source to target hop |
 
 ## Repository Structure
 
@@ -92,7 +92,7 @@ capslock/
 
 ## Secrets
 
-Create `.env` in the project root (never committed):
+Create `.env` in `components/meds-research/` (never committed):
 
 ```bash
 GROQ_API_KEY=gsk_...
@@ -107,6 +107,6 @@ GROQ_API_KEY=gsk_...
 | ICAP Operator | IT22347626 (Kulatunga) |
 | Policy Engine | Kaavya |
 | MEDS / Dashboard | IT22347626 |
-| SSDLB | - |
+| SSDLB | Themiya |
 
-**Academic:** SLIIT 2025/26 — Project 25-26J-043
+**Academic:** SLIIT 2025/26 | Project 25-26J-043

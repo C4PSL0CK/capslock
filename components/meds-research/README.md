@@ -1,4 +1,4 @@
-# MEDS — Multi-Environment Deployment System
+# MEDS - Multi-Environment Deployment System
 
 **Component of CAPSLOCK** | Python / FastAPI | Port 8000
 
@@ -8,14 +8,14 @@ MEDS is the primary user interface and orchestration layer of CAPSLOCK. It manag
 
 ## Features
 
-- **Risk Assessment Engine** — 4-factor weighted scoring (config 30%, policy 40%, version 20%, env 10%)
-- **ICAP Scanning Integration** — 3-layer fallback: RFC 3507 TCP, policy-engine compliance gate, deterministic simulation
-- **Policy Evolution Tracking** — version history, per-environment rollback
-- **Web Dashboard** — 6-tab UI: Dashboard, ICAP Operator, Audit Log, Policy Versions, Validation, Assistant
-- **NLP Assistant** — Groq llama-3.3-70b with tool calling for data queries and form automation
-- **Validation Demos** — interactive risk calculator, conflict detector, health scenarios, traffic switching
-- **Prometheus Metrics** — `/metrics` endpoint for all API operations
-- **Performance Optimised** — TTL-cached scanning mode, lazy K8s client, 60s ICAP poll interval
+- Risk Assessment Engine: 4-factor weighted scoring (config 30%, policy 40%, version 20%, env 10%)
+- ICAP Scanning Integration: 3-layer fallback: RFC 3507 TCP, policy-engine compliance gate, deterministic simulation
+- Policy Evolution Tracking: version history, per-environment rollback
+- Web Dashboard: 6-tab UI covering Dashboard, ICAP Operator, Audit Log, Policy Versions, Validation, and Assistant
+- NLP Assistant: Groq llama-3.3-70b with tool calling for data queries and form automation
+- Validation Demos: interactive risk calculator, conflict detector, health scenarios, traffic switching
+- Prometheus Metrics: `/metrics` endpoint for all API operations
+- Performance: TTL-cached scanning mode, lazy K8s client, 60s ICAP poll interval
 
 ## Quick Start
 
@@ -102,17 +102,17 @@ meds-research/
 
 Powered by **Groq** (free tier) with `llama-3.3-70b-versatile`.
 
-**Requires:** `GROQ_API_KEY` in `.env` at the repo root.
+Requires `GROQ_API_KEY` in `components/meds-research/.env`.
 
-**Capabilities via tool calling:**
-- `get_promotions` — query live promotion data
-- `get_audit_log` — search audit events
-- `get_analytics` — fetch summary statistics
-- `get_icap_status` — read ICAP health
-- `fill_promotion_form` — populate the dashboard form from natural language
-- `switch_tab` — navigate the UI programmatically
+Capabilities via tool calling:
+- `get_promotions`: query live promotion data
+- `get_audit_log`: search audit events
+- `get_analytics`: fetch summary statistics
+- `get_icap_status`: read ICAP health
+- `fill_promotion_form`: populate the dashboard form from natural language
+- `switch_tab`: navigate the UI programmatically
 
-**Example queries:**
+Example queries:
 - "How many promotions were rejected this week?"
 - "Promote myapp v2.0.0 from staging to production"
 - "What does a risk score of 75 mean?"
@@ -129,27 +129,27 @@ total_score = int(
 )
 ```
 
-**Decision tiers** (relative to `max_allowed`):
-- `> max_allowed` → REJECTED
-- `> 80% of max` → APPROVED, elevated risk (requires manual review)
-- `> 60% of max` → APPROVED, moderate risk (monitor closely)
-- `<= 60% of max` → APPROVED, low risk
+Decision tiers relative to `max_allowed`:
+- `> max_allowed`: REJECTED
+- `> 80% of max`: APPROVED, elevated risk (requires manual review)
+- `> 60% of max`: APPROVED, moderate risk (monitor closely)
+- `<= 60% of max`: APPROVED, low risk
 
 ## ICAP Scanner (3-Layer Fallback)
 
-1. **RFC 3507 TCP** — direct connection to ICAP service on port 1344
-2. **Policy-engine compliance gate** — checks namespace policy approval via REST
-3. **Deterministic simulation** — seeded random based on version + app name (threat probability: alpha 40%, beta 25%, rc 10%, stable 5%)
+1. RFC 3507 TCP: direct connection to ICAP service on port 1344
+2. Policy-engine compliance gate: checks namespace policy approval via REST
+3. Deterministic simulation: seeded random based on version + app name (threat probability: alpha 40%, beta 25%, rc 10%, stable 5%)
 
-**Performance:** scanning mode is TTL-cached (60s) to avoid HTTP overhead on every scan.
+Scanning mode is TTL-cached (60s) to avoid HTTP overhead on every scan.
 
 ## Environment Risk Thresholds
 
 | Environment | Max Score | Notes |
 |-------------|-----------|-------|
-| Development | 80 | Permissive — most promotions pass |
+| Development | 80 | Permissive, most promotions pass |
 | Staging | 60 | Pre-production gate |
-| Production | 40 | Strictest — only stable, low-change deployments |
+| Production | 40 | Strictest, only stable low-change deployments |
 
 ## Validation Test Suite
 
@@ -174,6 +174,7 @@ httpx==0.25.1
 prometheus-client==0.19.0
 structlog==23.2.0
 groq>=0.9.0
+python-dotenv>=1.0.0
 kubernetes==28.1.0
 kopf==1.37.1
 pytest==7.4.3
@@ -196,13 +197,11 @@ Risk factor weights are in `meds/validation/risk_scorer.py`.
 | Issue | Fix |
 |-------|-----|
 | Port 8000 in use | `pkill -f uvicorn` or change port |
-| Assistant shows key error | Add `GROQ_API_KEY` to `.env` and restart |
-| Scanning mode reverts to block | Fixed — config is now always saved locally before K8s sync |
+| Assistant shows key error | Add `GROQ_API_KEY` to `components/meds-research/.env` |
+| Scanning mode reverts to block | Config is saved locally before K8s sync |
 | Dashboard not updating | Hard refresh: Ctrl+Shift+R |
 
 ## Team
 
-- IT22347626 (Kulatunga) — MEDS Component
-- Part of CAPSLock Project (25-26J-043)
-
-**Academic:** SLIIT 2025/26
+- IT22347626 (Kulatunga): MEDS Component
+- Part of CAPSLock Project (25-26J-043), SLIIT 2025/26

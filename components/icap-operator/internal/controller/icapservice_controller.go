@@ -427,10 +427,13 @@ func (r *ICAPServiceReconciler) updateStatus(ctx context.Context, icapService *s
 	return r.Status().Update(ctx, icapService)
 }
 
-// calculateHealthScore computes adaptive health score
+// calculateHealthScore computes adaptive health score and emits Prometheus metrics.
 func (r *ICAPServiceReconciler) calculateHealthScore(deployment *appsv1.Deployment, icapService *securityv1alpha1.ICAPService) int32 {
 	// Use advanced adaptive health monitoring
 	metrics := health.CalculateHealth(deployment, icapService)
+
+	// Emit to Prometheus so Grafana dashboards and alerting rules have live data.
+	health.EmitMetrics(metrics, icapService.Name)
 
 	// Log health details for debugging
 	logger := log.Log.WithName("health")
