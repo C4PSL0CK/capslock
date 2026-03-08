@@ -1027,10 +1027,38 @@ async def pe_namespaces():
     return _PE_NAMESPACE_FALLBACK
 
 
+_PE_POLICIES_FALLBACK = [
+    {
+        "name": "dev-policy",
+        "environment": "development",
+        "description": "Relaxed security for development. Audit-mode enforcement, baseline pod security, env-var secrets allowed.",
+        "enforcement_mode": "audit",
+        "compliance_frameworks": ["cis"],
+        "icap_mode": "log-only",
+    },
+    {
+        "name": "staging-policy",
+        "environment": "staging",
+        "description": "Pre-production hardening. Restricted pod security, network policies required, PCI-DSS validation.",
+        "enforcement_mode": "enforce",
+        "compliance_frameworks": ["cis", "pci-dss"],
+        "icap_mode": "warn",
+    },
+    {
+        "name": "prod-policy",
+        "environment": "production",
+        "description": "Maximum security. Strict enforcement, no privileged containers, external secrets manager required, block mode ICAP.",
+        "enforcement_mode": "strict",
+        "compliance_frameworks": ["cis", "pci-dss"],
+        "icap_mode": "block",
+    },
+]
+
+
 @app.get("/api/policy-engine/policies")
 async def pe_policies():
     if not POLICY_ENGINE_URL:
-        return []
+        return _PE_POLICIES_FALLBACK
     try:
         async with httpx.AsyncClient() as client:
             r = await client.get(f"{POLICY_ENGINE_URL}/api/policies", timeout=5.0)
@@ -1038,10 +1066,10 @@ async def pe_policies():
             if isinstance(data, list):
                 return data
             if isinstance(data, dict):
-                return data.get("policies", [])
+                return data.get("policies", _PE_POLICIES_FALLBACK)
     except Exception:
         pass
-    return []
+    return _PE_POLICIES_FALLBACK
 
 
 @app.get("/api/policy-engine/compliance/frameworks")
@@ -1066,13 +1094,13 @@ class _ApplyPolicyRequest(BaseModel):
 
 
 _NS_POLICY_MAP = {
-    "dev-test":        {"environment": "development", "policy": "dev-policy",     "enforcement": "audit"},
-    "staging-test":    {"environment": "staging",     "policy": "staging-policy", "enforcement": "enforce"},
-    "prod-test":       {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
-    "default":         {"environment": "development", "policy": "dev-policy",     "enforcement": "audit"},
-    "kube-system":     {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
-    "capslock-system": {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
-    "monitoring":      {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict"},
+    "dev-test":        {"environment": "development", "policy": "dev-policy",     "enforcement": "audit",   "icap_mode": "log-only"},
+    "staging-test":    {"environment": "staging",     "policy": "staging-policy", "enforcement": "enforce", "icap_mode": "warn"},
+    "prod-test":       {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict",  "icap_mode": "block"},
+    "default":         {"environment": "development", "policy": "dev-policy",     "enforcement": "audit",   "icap_mode": "log-only"},
+    "kube-system":     {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict",  "icap_mode": "block"},
+    "capslock-system": {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict",  "icap_mode": "block"},
+    "monitoring":      {"environment": "production",  "policy": "prod-policy",    "enforcement": "strict",  "icap_mode": "block"},
 }
 
 
@@ -1080,11 +1108,10 @@ def _infer_ns_policy(namespace: str) -> dict:
     """Infer environment and policy from namespace name patterns."""
     ns = namespace.lower()
     if any(kw in ns for kw in ("prod", "production", "prd")):
-        return {"environment": "production", "policy": "prod-policy", "enforcement": "strict"}
+        return {"environment": "production", "policy": "prod-policy", "enforcement": "strict", "icap_mode": "block"}
     if any(kw in ns for kw in ("stag", "staging", "stage", "uat")):
-        return {"environment": "staging", "policy": "staging-policy", "enforcement": "enforce"}
-    # dev / development / default / everything else
-    return {"environment": "development", "policy": "dev-policy", "enforcement": "audit"}
+        return {"environment": "staging", "policy": "staging-policy", "enforcement": "enforce", "icap_mode": "warn"}
+    return {"environment": "development", "policy": "dev-policy", "enforcement": "audit", "icap_mode": "log-only"}
 
 
 @app.post("/api/policy-engine/namespaces/{namespace}/apply")
@@ -1101,17 +1128,31 @@ async def pe_apply_policy(namespace: str, body: _ApplyPolicyRequest):
                     return r.json()
         except Exception:
             pass
-    # Fallback: look up known map first, then infer from namespace name
     info = _NS_POLICY_MAP.get(namespace) or _infer_ns_policy(namespace)
     return {
         "namespace": namespace,
         "environment": info["environment"],
         "policy": info["policy"],
         "enforcement": info["enforcement"],
+        "icap_mode": info["icap_mode"],
         "strategy": body.strategy,
         "status": "applied",
         "source": "local-fallback",
     }
+
+
+@app.get("/api/policy-engine/conflict-audit")
+async def pe_conflict_audit():
+    """Return recent conflict resolution audit entries from the Go policy engine."""
+    if POLICY_ENGINE_URL:
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.get(f"{POLICY_ENGINE_URL}/api/conflict-audit", timeout=3.0)
+                if r.status_code == 200:
+                    return r.json()
+        except Exception:
+            pass
+    return []
 
 
 # ---------------------------------------------------------------------------

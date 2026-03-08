@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -194,6 +195,17 @@ func (pe *PolicyEngine) RemovePolicy(namespace string) error {
 	}
 	delete(pe.appliedPolicies, namespace)
 	return nil
+}
+
+// StartWatching starts a background goroutine that polls the given namespace
+// for environment changes and re-applies policy when the environment shifts.
+func (pe *PolicyEngine) StartWatching(ctx context.Context, namespace string, interval time.Duration) {
+	go pe.detector.Watch(ctx, namespace, interval, func(oldEnv, newEnv string, confidence float64) {
+		log.Printf("[watch] namespace %q changed: %s → %s (confidence=%.2f); re-applying policy", namespace, oldEnv, newEnv, confidence)
+		if _, err := pe.ApplyPolicyToNamespace(ctx, namespace); err != nil {
+			log.Printf("[watch] re-apply failed for %q: %v", namespace, err)
+		}
+	})
 }
 
 // Helper function

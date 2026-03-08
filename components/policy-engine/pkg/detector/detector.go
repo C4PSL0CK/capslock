@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +22,10 @@ type Detector struct {
 	networkAnalyzer    *NetworkAnalyzer
 	secretsAnalyzer    *SecretsAnalyzer
 	clusterDetector    *ClusterCharacteristicDetector
+
+	// F1: change-detection state
+	lastKnown map[string]string
+	mu        sync.RWMutex
 }
 
 // NewDetector creates a new detector with all analyzers
@@ -309,4 +314,37 @@ func (d *Detector) CheckNetworkSegmentation(ctx context.Context, namespace strin
 // CheckSecretsManagement checks if secrets are properly managed
 func (d *Detector) CheckSecretsManagement(ctx context.Context, namespace string) (bool, []string, error) {
 	return d.secretsAnalyzer.CheckSecretsManagement(ctx, namespace)
+}
+
+// Watch polls the namespace environment at the given interval and calls onChange
+// whenever the detected environment differs from the previously seen value.
+// It runs until ctx is cancelled.
+func (d *Detector) Watch(ctx context.Context, namespace string, interval time.Duration, onChange func(oldEnv, newEnv string, confidence float64)) {
+	d.mu.Lock()
+	if d.lastKnown == nil {
+		d.lastKnown = make(map[string]string)
+	}
+	d.mu.Unlock()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			env, confidence, err := d.DetectEnvironment(ctx, namespace)
+			if err != nil {
+				continue
+			}
+			d.mu.Lock()
+			prev := d.lastKnown[namespace]
+			d.lastKnown[namespace] = env
+			d.mu.Unlock()
+			if prev != "" && prev != env {
+				onChange(prev, env, confidence)
+			}
+		}
+	}
 }

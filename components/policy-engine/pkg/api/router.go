@@ -23,6 +23,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	// Conflict management
 	mux.HandleFunc("/api/conflicts/detect", s.HandleDetectConflicts)
 	mux.HandleFunc("/api/conflicts/resolve", s.HandleResolveConflicts)
+	mux.HandleFunc("/api/conflict-audit", s.HandleConflictAuditLog)
 
 	return mux
 }

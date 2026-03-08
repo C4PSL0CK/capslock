@@ -1,8 +1,10 @@
 package policy
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -63,6 +65,9 @@ type PolicyTemplate struct {
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description" json:"description"`
 	Version     string `yaml:"version" json:"version"`
+
+	// F2: Base template to inherit defaults from (filename without .yaml)
+	Base string `yaml:"base" json:"base,omitempty"`
 
 	// Typed environment (dev / staging / prod)
 	Environment Environment `yaml:"environment" json:"environment"`
@@ -178,6 +183,11 @@ func LoadPolicyTemplates() ([]*PolicyTemplate, error) {
 			continue
 		}
 
+		// F2: skip base templates — they are only used as inheritance sources
+		if strings.HasPrefix(entry.Name(), "base-") {
+			continue
+		}
+
 		// Load template
 		templatePath := filepath.Join(templatesDir, entry.Name())
 		template, err := LoadPolicyTemplate(templatePath)
@@ -210,4 +220,63 @@ func LoadPolicyTemplate(filepath string) (*PolicyTemplate, error) {
 	}
 
 	return &template, nil
+}
+
+// LoadPolicyTemplateWithBase loads a template and merges it with its base template
+// if the Base field is set. The loader func resolves base names to templates.
+func LoadPolicyTemplateWithBase(filePath string, loader func(name string) (*PolicyTemplate, error)) (*PolicyTemplate, error) {
+	tmpl, err := LoadPolicyTemplate(filePath)
+	if err != nil {
+		return nil, err
+	}
+	if tmpl.Base == "" {
+		return tmpl, nil
+	}
+	base, err := loader(tmpl.Base)
+	if err != nil {
+		return nil, fmt.Errorf("loading base template %q: %w", tmpl.Base, err)
+	}
+	return mergeTemplates(base, tmpl), nil
+}
+
+// mergeTemplates deep-merges override on top of base (override wins on every set field).
+func mergeTemplates(base, override *PolicyTemplate) *PolicyTemplate {
+	baseMap := make(map[string]interface{})
+	overMap := make(map[string]interface{})
+
+	if data, err := yaml.Marshal(base); err == nil {
+		yaml.Unmarshal(data, &baseMap) //nolint:errcheck
+	}
+	if data, err := yaml.Marshal(override); err == nil {
+		yaml.Unmarshal(data, &overMap) //nolint:errcheck
+	}
+
+	merged := deepMergeMap(baseMap, overMap)
+
+	data, err := yaml.Marshal(merged)
+	if err != nil {
+		return override
+	}
+	var result PolicyTemplate
+	if err := yaml.Unmarshal(data, &result); err != nil {
+		return override
+	}
+	return &result
+}
+
+func deepMergeMap(base, override map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{}, len(base))
+	for k, v := range base {
+		result[k] = v
+	}
+	for k, v := range override {
+		if ov, ok := v.(map[string]interface{}); ok {
+			if bv, ok := result[k].(map[string]interface{}); ok {
+				result[k] = deepMergeMap(bv, ov)
+				continue
+			}
+		}
+		result[k] = v
+	}
+	return result
 }

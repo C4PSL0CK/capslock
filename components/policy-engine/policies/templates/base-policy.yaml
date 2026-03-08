@@ -1,0 +1,59 @@
+# Base Policy Template — shared defaults inherited by dev / staging / prod policies.
+# Individual templates set `base: base-policy` and override only what differs.
+name: "base-policy"
+description: "Shared security baseline inherited by all environment policies"
+version: "1.0.0"
+risk_level: "medium"
+
+enforcement:
+  mode: "audit"
+
+pod_security:
+  standard: "baseline"
+  allow_privileged: false
+  allow_host_network: false
+  allow_host_pid: false
+  allow_host_ipc: false
+  allow_host_path: false
+  require_run_as_non_root: false
+  require_read_only_root: false
+  require_drop_all: false
+  allowed_capabilities: []
+  require_seccomp_profile: false
+  require_apparmor_profile: false
+
+rbac:
+  allow_cluster_admin: false
+  allow_wildcard_permissions: false
+  require_dedicated_sa: false
+  disable_auto_mount: false
+
+network:
+  require_network_policies: false
+  require_default_deny: false
+  allow_external_egress: true
+
+secrets:
+  allow_secrets_as_env_vars: true
+  require_external_secrets_manager: false
+  require_encryption_at_rest: false
+
+resources:
+  require_resource_quota: false
+  require_limit_range: false
+  require_resource_limits: false
+
+compliance:
+  standards:
+    - "cis"
+
+icap_config:
+  scanning_mode: "log-only"
+  max_file_size: "50MB"
+  enable_av_signature_updates: true
+  signature_update_interval: "6h"
+
+performance:
+  max_concurrent_scans: 10
+  scan_timeout_seconds: 30
+  queue_size_limit: 100

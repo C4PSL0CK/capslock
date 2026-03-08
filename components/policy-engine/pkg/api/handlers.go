@@ -1,10 +1,12 @@
 package api
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/C4PSL0CK/capslock/components/policy-engine/pkg/conflict"
@@ -14,11 +16,23 @@ import (
 
 // Server represents the API server
 type Server struct {
-	detector       *detector.EnvironmentDetector
-	policyManager  *policy.PolicyManager
-	policySelector *policy.PolicySelector
+	detector         *detector.EnvironmentDetector
+	policyManager    *policy.PolicyManager
+	policySelector   *policy.PolicySelector
 	conflictDetector *conflict.ConflictDetector
-	version        string
+	auditLogPath     string
+	version          string
+}
+
+// conflictAuditEntry is a single JSONL record written on each conflict resolution.
+type conflictAuditEntry struct {
+	EventType    string   `json:"event_type"`
+	Timestamp    string   `json:"timestamp"`
+	ConflictID   string   `json:"conflict_id"`
+	Strategy     string   `json:"strategy"`
+	ChosenPolicy string   `json:"chosen_policy"`
+	Rejected     []string `json:"rejected"`
+	Reason       string   `json:"reason"`
 }
 
 // NewServer creates a new API server
@@ -41,11 +55,17 @@ func NewServer() (*Server, error) {
 	// Initialize conflict detector
 	cd := conflict.NewConflictDetector()
 
+	auditLogPath := os.Getenv("CONFLICT_AUDIT_LOG")
+	if auditLogPath == "" {
+		auditLogPath = "/tmp/capslock-conflict-audit.jsonl"
+	}
+
 	return &Server{
 		detector:         det,
 		policyManager:    pm,
 		policySelector:   ps,
 		conflictDetector: cd,
+		auditLogPath:     auditLogPath,
 		version:          "1.0.0",
 	}, nil
 }
@@ -350,7 +370,68 @@ func (s *Server) HandleResolveConflicts(w http.ResponseWriter, r *http.Request) 
 		GeneratedAt:   resolutionReport.GeneratedAt,
 	}
 
+	// F3: persist audit entry before responding
+	s.writeConflictAuditEntries(resolutionReport)
+
 	s.sendJSON(w, resp, http.StatusOK)
+}
+
+// HandleConflictAuditLog returns recent conflict resolution audit entries.
+func (s *Server) HandleConflictAuditLog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		s.sendError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	entries := []conflictAuditEntry{}
+	f, err := os.Open(s.auditLogPath)
+	if err != nil {
+		s.sendJSON(w, entries, http.StatusOK) // empty — file not yet created
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		var entry conflictAuditEntry
+		if json.Unmarshal(scanner.Bytes(), &entry) == nil {
+			entries = append(entries, entry)
+		}
+	}
+	s.sendJSON(w, entries, http.StatusOK)
+}
+
+// writeConflictAuditEntries appends one JSONL line per resolution to the audit log.
+func (s *Server) writeConflictAuditEntries(report *conflict.ResolutionReport) {
+	if s.auditLogPath == "" || report == nil {
+		return
+	}
+	f, err := os.OpenFile(s.auditLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	enc := json.NewEncoder(f)
+	for _, res := range report.Resolutions {
+		chosen := ""
+		if res.ChosenPolicy != nil {
+			chosen = res.ChosenPolicy.Name
+		}
+		rejected := make([]string, len(res.RejectedPolicies))
+		for i, rp := range res.RejectedPolicies {
+			rejected[i] = rp.Name
+		}
+		enc.Encode(conflictAuditEntry{
+			EventType:    "conflict_resolved",
+			Timestamp:    time.Now().UTC().Format(time.RFC3339),
+			ConflictID:   res.ConflictID,
+			Strategy:     string(res.Strategy),
+			ChosenPolicy: chosen,
+			Rejected:     rejected,
+			Reason:       res.Reason,
+		})
+	}
 }
 
 // HandleHealth handles health check requests

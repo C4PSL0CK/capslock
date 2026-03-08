@@ -383,57 +383,84 @@
         <div id="tab-policy-engine" class="tab-panel hidden">
 
             <div class="tab-intro">
-                <strong>Policy Engine</strong> - Environment-aware policy controller. Detects namespace environments from Kubernetes labels, applies compliance-first or risk-level policy strategies, and validates against CIS and PCI-DSS frameworks.
+                <strong>Policy Engine (EAPE)</strong> — Detects which environment each Kubernetes namespace belongs to, then selects and enforces the matching security policy. Validates deployments against CIS Benchmark and PCI-DSS before promotion is allowed. Resolves conflicts when multiple policies compete for the same namespace.
             </div>
 
+            <!-- KPI row -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:20px">
+                <div class="card" style="padding:16px 20px">
+                    <div style="font-size:0.75rem;opacity:0.55;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Policies Loaded</div>
+                    <div style="font-size:2rem;font-weight:700;line-height:1">3</div>
+                    <div style="font-size:0.8rem;opacity:0.5;margin-top:4px">dev · staging · prod</div>
+                </div>
+                <div class="card" style="padding:16px 20px">
+                    <div style="font-size:0.75rem;opacity:0.55;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Compliance Frameworks</div>
+                    <div style="font-size:2rem;font-weight:700;line-height:1">2</div>
+                    <div style="font-size:0.8rem;opacity:0.5;margin-top:4px">CIS Benchmark · PCI-DSS v4.0</div>
+                </div>
+                <div class="card" style="padding:16px 20px">
+                    <div style="font-size:0.75rem;opacity:0.55;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Enforcement Modes</div>
+                    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+                        <span style="background:rgba(16,185,129,0.15);color:#10b981;border-radius:6px;padding:3px 10px;font-size:0.8rem;font-weight:600">audit</span>
+                        <span style="background:rgba(245,158,11,0.15);color:#f59e0b;border-radius:6px;padding:3px 10px;font-size:0.8rem;font-weight:600">enforce</span>
+                        <span style="background:rgba(239,68,68,0.15);color:#ef4444;border-radius:6px;padding:3px 10px;font-size:0.8rem;font-weight:600">strict</span>
+                    </div>
+                    <div style="font-size:0.8rem;opacity:0.5;margin-top:6px">dev · staging · prod</div>
+                </div>
+            </div>
+
+            <!-- Detected Environments + Policy Details -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
                 <div class="card">
                     <div class="card-header-row">
-                        <h2>Namespace Detection</h2>
+                        <h2>Detected Environments</h2>
                         <button class="btn btn-secondary" onclick="loadPENamespaces()">Refresh</button>
                     </div>
-                    <p class="card-desc">Environments detected from Kubernetes namespace labels.</p>
+                    <p class="card-desc">Namespaces classified by scanning Kubernetes labels using a 7-factor confidence algorithm. Higher confidence = stronger label evidence.</p>
                     <div id="pe-namespaces-panel"><p class="empty-state">Loading…</p></div>
                 </div>
 
                 <div class="card">
                     <div class="card-header-row">
-                        <h2>Policy Catalog</h2>
+                        <h2>Policy Details</h2>
                         <button class="btn btn-secondary" onclick="loadPEPolicies()">Refresh</button>
                     </div>
-                    <p class="card-desc">Policy templates registered in the Policy Engine.</p>
+                    <p class="card-desc">What each policy enforces — enforcement mode, ICAP scanning behaviour, and compliance requirements.</p>
                     <div id="pe-policies-panel"><p class="empty-state">Loading…</p></div>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header-row">
-                    <h2>Compliance Frameworks</h2>
-                    <button class="btn btn-secondary" onclick="loadPEFrameworks()">Refresh</button>
+            <!-- Apply + Conflict Log -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+                <div class="card">
+                    <h2>Apply Policy to Namespace</h2>
+                    <p class="card-desc">Enforce a security policy. The engine detects the environment, picks the matching policy, and shows what controls will be applied.</p>
+                    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+                        <div style="flex:1;min-width:150px">
+                            <label style="display:block;margin-bottom:5px;font-size:0.82rem;opacity:0.65">Namespace</label>
+                            <input id="pe-apply-ns" type="text" placeholder="e.g. prod-test" class="form-input" style="width:100%">
+                        </div>
+                        <div style="flex:1;min-width:150px">
+                            <label style="display:block;margin-bottom:5px;font-size:0.82rem;opacity:0.65">Conflict Strategy</label>
+                            <select id="pe-apply-strategy" class="form-input" style="width:100%">
+                                <option value="compliance-first">Compliance-first</option>
+                                <option value="priority">Priority</option>
+                                <option value="risk-level">Risk-level</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="applyPEPolicy()" style="height:40px;padding:0 20px">Apply</button>
+                    </div>
+                    <div id="pe-apply-result"></div>
                 </div>
-                <p class="card-desc">Supported compliance standards validated by the Policy Engine.</p>
-                <div id="pe-frameworks-panel"><p class="empty-state">Loading…</p></div>
-            </div>
 
-            <div class="card" style="margin-top:20px">
-                <h2>Apply Policy to Namespace</h2>
-                <p class="card-desc">Enforce a policy on a namespace using the selected conflict resolution strategy.</p>
-                <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-                    <div style="flex:1;min-width:180px">
-                        <label style="display:block;margin-bottom:6px;font-size:0.85rem;opacity:0.7">Namespace</label>
-                        <input id="pe-apply-ns" type="text" placeholder="e.g. prod-test" class="form-input" style="width:100%">
+                <div class="card">
+                    <div class="card-header-row">
+                        <h2>Conflict Resolution Log</h2>
+                        <button class="btn btn-secondary" onclick="loadPEConflictLog()">Refresh</button>
                     </div>
-                    <div style="flex:1;min-width:180px">
-                        <label style="display:block;margin-bottom:6px;font-size:0.85rem;opacity:0.7">Conflict Strategy</label>
-                        <select id="pe-apply-strategy" class="form-input" style="width:100%">
-                            <option value="compliance-first">Compliance-first</option>
-                            <option value="priority">Priority</option>
-                            <option value="risk-level">Risk-level</option>
-                        </select>
-                    </div>
-                    <button class="btn btn-primary" onclick="applyPEPolicy()" style="height:44px;padding:0 24px">Apply Policy</button>
+                    <p class="card-desc">Audit trail of policy conflicts detected and resolved. Written each time the engine picks one policy over another.</p>
+                    <div id="pe-conflict-log"><p class="empty-state">Loading…</p></div>
                 </div>
-                <div id="pe-apply-result" style="margin-top:16px"></div>
             </div>
         </div>
 

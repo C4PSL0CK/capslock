@@ -391,7 +391,7 @@ function switchTab(name) {
     } else if (name === 'policy-engine') {
         loadPENamespaces();
         loadPEPolicies();
-        loadPEFrameworks();
+        loadPEConflictLog();
     } else if (name === 'load-balancer') {
         loadLBState();
         loadLBTrend();
@@ -1119,33 +1119,45 @@ async function loadPENamespaces() {
         const res = await fetch(`${API_BASE}/policy-engine/namespaces`);
         const data = await res.json();
         if (!Array.isArray(data) || data.length === 0) {
-            el.innerHTML = '<p style="opacity:0.5;text-align:center;padding:24px 0">No namespaces detected. Policy Engine may be offline.</p>';
+            el.innerHTML = '<p style="opacity:0.5;text-align:center;padding:24px 0">No namespaces detected.</p>';
             return;
         }
-        el.innerHTML = `
-            <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
-                <thead>
-                    <tr style="border-bottom:1px solid var(--border);text-align:left">
-                        <th style="padding:6px 10px;opacity:0.6;font-weight:500">Namespace</th>
-                        <th style="padding:6px 10px;opacity:0.6;font-weight:500">Environment</th>
-                        <th style="padding:6px 10px;opacity:0.6;font-weight:500">Policy</th>
-                        <th style="padding:6px 10px;opacity:0.6;font-weight:500">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${data.map(ns => `
-                        <tr style="border-bottom:1px solid var(--border)">
-                            <td style="padding:8px 10px;font-family:monospace">${ns.namespace || ns.name || '-'}</td>
-                            <td style="padding:8px 10px"><span class="badge badge-${envBadgeClass(ns.environment)}">${ns.environment || 'unknown'}</span></td>
-                            <td style="padding:8px 10px;opacity:0.75">${ns.policy || ns.applied_policy || '-'}</td>
-                            <td style="padding:8px 10px">
-                                <button class="btn btn-secondary" style="padding:2px 10px;font-size:0.8rem"
-                                    onclick="quickApplyPolicy('${ns.namespace || ns.name || ''}')">Apply</button>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>`;
+        el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.83rem">
+            <thead>
+                <tr style="border-bottom:1px solid var(--border);text-align:left">
+                    <th style="padding:6px 8px;opacity:0.55;font-weight:500">Namespace</th>
+                    <th style="padding:6px 8px;opacity:0.55;font-weight:500">Environment</th>
+                    <th style="padding:6px 8px;opacity:0.55;font-weight:500">Confidence</th>
+                    <th style="padding:6px 8px;opacity:0.55;font-weight:500">Policy</th>
+                    <th style="padding:6px 8px;opacity:0.55;font-weight:500"></th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.map(ns => {
+                    const conf = ns.confidence ?? 0;
+                    const pct = Math.round(conf * 100);
+                    const barClr = pct >= 80 ? '#10b981' : pct >= 50 ? '#f59e0b' : '#ef4444';
+                    const nsName = ns.namespace || ns.name || '-';
+                    return `<tr style="border-bottom:1px solid var(--border)">
+                        <td style="padding:8px;font-family:monospace;font-size:0.8rem">${nsName}</td>
+                        <td style="padding:8px"><span class="badge badge-${envBadgeClass(ns.environment)}">${ns.environment || 'unknown'}</span></td>
+                        <td style="padding:8px;min-width:90px">
+                            <div style="display:flex;align-items:center;gap:6px">
+                                <div style="flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+                                    <div style="width:${pct}%;height:100%;background:${barClr}"></div>
+                                </div>
+                                <span style="font-size:0.75rem;opacity:0.6;min-width:28px">${pct}%</span>
+                            </div>
+                        </td>
+                        <td style="padding:8px;opacity:0.65;font-size:0.8rem">${ns.policy || '-'}</td>
+                        <td style="padding:8px">
+                            <button class="btn btn-secondary" style="padding:2px 8px;font-size:0.75rem"
+                                onclick="quickApplyPolicy('${nsName}')">Apply</button>
+                        </td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
     } catch (e) {
         el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
     }
@@ -1165,52 +1177,42 @@ async function loadPEPolicies() {
         const res = await fetch(`${API_BASE}/policy-engine/policies`);
         const data = await res.json();
         if (!Array.isArray(data) || data.length === 0) {
-            el.innerHTML = '<p style="opacity:0.5;text-align:center;padding:24px 0">No policies found.</p>';
+            el.innerHTML = '<p style="opacity:0.5;padding:12px">No policies found.</p>';
             return;
         }
-        el.innerHTML = data.map(p => `
-            <div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
-                <div style="font-weight:600;margin-bottom:2px">${p.name || p.id || '-'}</div>
-                <div style="font-size:0.82rem;opacity:0.65">${p.description || p.type || ''}</div>
-                ${p.compliance_frameworks ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">
-                    ${p.compliance_frameworks.map(f => `<span style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:2px 8px;font-size:0.75rem">${f}</span>`).join('')}
-                </div>` : ''}
-            </div>`).join('');
+        el.innerHTML = data.map(p => {
+            const envClass = envBadgeClass(p.environment || p.target_environment || '');
+            const mode = p.enforcement_mode || p.enforcement || 'audit';
+            const modeClr = mode === 'strict' ? '#ef4444' : mode === 'enforce' ? '#f59e0b' : '#10b981';
+            const standards = Array.isArray(p.compliance_frameworks) ? p.compliance_frameworks
+                            : Array.isArray(p.compliance) ? p.compliance : [];
+            const icap = p.icap_mode || null;
+            return `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                    <span style="font-weight:700;font-size:0.92rem">${p.name || p.id}</span>
+                    <span class="badge badge-${envClass}" style="font-size:0.7rem">${p.environment || p.target_environment || '?'}</span>
+                    <span style="margin-left:auto;font-size:0.8rem;font-weight:600;color:${modeClr}">${mode}</span>
+                </div>
+                <div style="font-size:0.79rem;opacity:0.6;margin-bottom:8px;line-height:1.4">${p.description || ''}</div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap">
+                    ${standards.map(f => `<span style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:0.72rem">${f}</span>`).join('')}
+                    ${icap ? `<span style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:0.72rem;opacity:0.75">ICAP: ${icap}</span>` : ''}
+                </div>
+            </div>`;
+        }).join('');
     } catch (e) {
         el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
     }
 }
 
-async function loadPEFrameworks() {
-    const el = document.getElementById('pe-frameworks-panel');
-    try {
-        const res = await fetch(`${API_BASE}/policy-engine/compliance/frameworks`);
-        const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) {
-            el.innerHTML = '<p style="opacity:0.5;padding:12px">No frameworks found.</p>';
-            return;
-        }
-        el.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">
-            ${data.map(f => {
-                const name = typeof f === 'string' ? f : (f.name || f.id || JSON.stringify(f));
-                const desc = typeof f === 'object' ? (f.description || '') : '';
-                return `<div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:10px 16px;min-width:140px">
-                    <div style="font-weight:600;font-size:0.9rem">${name}</div>
-                    ${desc ? `<div style="font-size:0.78rem;opacity:0.6;margin-top:4px">${desc}</div>` : ''}
-                </div>`;
-            }).join('')}
-        </div>`;
-    } catch (e) {
-        el.innerHTML = `<p style="color:var(--danger);padding:12px">Error: ${e.message}</p>`;
-    }
-}
+async function loadPEFrameworks() { /* frameworks shown in KPI row — no panel needed */ }
 
 async function applyPEPolicy() {
     const ns = document.getElementById('pe-apply-ns').value.trim();
     const strategy = document.getElementById('pe-apply-strategy').value;
     const el = document.getElementById('pe-apply-result');
-    if (!ns) { el.innerHTML = '<p style="color:var(--danger)">Please enter a namespace.</p>'; return; }
-    el.innerHTML = '<p style="opacity:0.5">Applying...</p>';
+    if (!ns) { el.innerHTML = '<p style="color:var(--danger);font-size:0.85rem">Enter a namespace name.</p>'; return; }
+    el.innerHTML = '<p style="opacity:0.45;font-size:0.85rem">Applying…</p>';
     try {
         const res = await fetch(`${API_BASE}/policy-engine/namespaces/${encodeURIComponent(ns)}/apply`, {
             method: 'POST',
@@ -1219,20 +1221,62 @@ async function applyPEPolicy() {
         });
         const data = await res.json();
         const ok = res.ok && !data.error;
-        el.innerHTML = `<div style="padding:12px;border-radius:8px;background:${ok ? 'var(--bg-secondary)' : '#f8d7da'};color:${ok ? 'inherit' : '#721c24'};font-size:0.88rem">
-            ${ok ? 'Policy applied successfully.' : (data.error || data.detail || JSON.stringify(data))}
-            ${data.policy ? `<br><strong>Policy:</strong> ${data.policy}` : ''}
-            ${data.environment ? `<br><strong>Environment:</strong> ${data.environment}` : ''}
-        </div>`;
-        if (ok) loadPENamespaces();
+        if (ok) {
+            const env = data.environment || 'unknown';
+            const policy = data.policy || data.selected_policy || '—';
+            const enforcement = data.enforcement || data.enforcement_mode || '—';
+            const icap = data.icap_mode || '—';
+            const enfClr = enforcement === 'strict' ? '#ef4444' : enforcement === 'enforce' ? '#f59e0b' : '#10b981';
+            el.innerHTML = `<div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:0.83rem">
+                <div style="font-weight:600;color:#10b981;margin-bottom:10px;font-size:0.88rem">Policy applied successfully</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px">
+                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Namespace</div><strong style="font-family:monospace">${ns}</strong></div>
+                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Environment</div><span class="badge badge-${envBadgeClass(env)}">${env}</span></div>
+                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Policy</div><strong>${policy}</strong></div>
+                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Enforcement</div><strong style="color:${enfClr}">${enforcement}</strong></div>
+                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">ICAP scanning</div><strong>${icap}</strong></div>
+                    <div><div style="opacity:0.5;font-size:0.75rem;margin-bottom:2px">Conflict strategy</div><span style="opacity:0.75">${strategy}</span></div>
+                </div>
+            </div>`;
+            loadPENamespaces();
+        } else {
+            el.innerHTML = `<div style="background:rgba(239,68,68,0.1);color:#ef4444;border-radius:8px;padding:12px;font-size:0.85rem">${data.error || data.detail || JSON.stringify(data)}</div>`;
+        }
     } catch (e) {
-        el.innerHTML = `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+        el.innerHTML = `<p style="color:var(--danger);font-size:0.85rem">Error: ${e.message}</p>`;
     }
 }
 
 function quickApplyPolicy(ns) {
     document.getElementById('pe-apply-ns').value = ns;
-    document.getElementById('pe-apply-ns').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    applyPEPolicy();
+}
+
+async function loadPEConflictLog() {
+    const el = document.getElementById('pe-conflict-log');
+    try {
+        const res = await fetch(`${API_BASE}/policy-engine/conflict-audit`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+            el.innerHTML = '<p style="opacity:0.45;text-align:center;padding:24px 0;font-size:0.85rem">No conflicts recorded yet.<br>Conflicts are logged when the engine resolves competing policies.</p>';
+            return;
+        }
+        el.innerHTML = data.slice().reverse().map(e => {
+            const ts = e.timestamp ? new Date(e.timestamp).toLocaleString() : '';
+            const stratClr = e.strategy === 'security-first' ? '#ef4444' : e.strategy === 'environment-aware' ? '#f59e0b' : '#6366f1';
+            return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">
+                    <span style="font-weight:600;font-size:0.85rem">${e.chosen_policy || '—'}</span>
+                    <span style="font-size:0.72rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1px 7px;color:${stratClr}">${e.strategy || '—'}</span>
+                    <span style="margin-left:auto;opacity:0.4;font-size:0.72rem">${ts}</span>
+                </div>
+                ${e.reason ? `<div style="font-size:0.78rem;opacity:0.6">${e.reason}</div>` : ''}
+                ${e.rejected && e.rejected.length ? `<div style="font-size:0.73rem;opacity:0.4;margin-top:2px">Rejected: ${e.rejected.join(', ')}</div>` : ''}
+            </div>`;
+        }).join('');
+    } catch (e) {
+        el.innerHTML = '<p style="opacity:0.45;text-align:center;padding:24px 0;font-size:0.85rem">Conflict log unavailable.</p>';
+    }
 }
 
 // =============================================================================
