@@ -140,9 +140,9 @@ function renderPromotions() {
                                 : '<span style="opacity:0.4">—</span>'}
                         </td>
                         <td style="text-align:center">
-                            <span class="badge badge-${p.decision === 'APPROVED' ? 'approved' : 'rejected'}"
+                            <span class="badge badge-${p.decision === 'APPROVED' ? 'approved' : p.decision === 'PENDING_APPROVAL' ? 'pending' : 'rejected'}"
                                   title="${p.nlp_reasoning || ''}"
-                                  style="cursor:${p.nlp_reasoning ? 'help' : 'default'}">${p.decision}</span>
+                                  style="cursor:${p.nlp_reasoning ? 'help' : 'default'}">${p.decision.replace(/_/g,' ')}</span>
                         </td>
                     </tr>`;
                 }).join('')}
@@ -265,7 +265,7 @@ document.getElementById('promotion-form').addEventListener('submit', async (e) =
 function showResult(result) {
     const modal = document.getElementById('result-modal');
     const details = document.getElementById('result-details');
-    const decisionClass = result.decision === 'APPROVED' ? 'success' : 'danger';
+    const decisionClass = result.decision === 'APPROVED' ? 'success' : result.decision === 'PENDING_APPROVAL' ? 'warning' : 'danger';
     const icap = result.icap_scan;
 
     // Build ICAP card
@@ -337,7 +337,7 @@ function showResult(result) {
     details.innerHTML = `
         <h2>Promotion Result</h2>
         <div class="stat-card ${decisionClass}" style="margin-bottom:20px;">
-            <div class="stat-value">${result.decision}</div>
+            <div class="stat-value">${result.decision.replace(/_/g,' ')}</div>
             <div class="stat-label">${scoreLabel}</div>
         </div>
         ${reasoningBlock}
