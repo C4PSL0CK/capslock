@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CAPSLock — Kubernetes-Native Multi-Environment Security Platform</title>
+<meta name="description" content="CAPSLock: A Kubernetes-Native Multi-Environment Deployment System with ICAP Integration — Research Project 25-26J-043, SLIIT"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ═══════════════════════════ NAVBAR ═══════════════════════════ -->
+<nav id="navbar">
+  <div class="nav-inner">
+    <a href="#hero" class="nav-logo">
+      CAPS<span>Lock</span>
+    </a>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="#hero">Home</a></li>
+      <li><a href="#domain">Domain</a></li>
+      <li><a href="#milestones">Milestones</a></li>
+      <li><a href="#components">Components</a></li>
+      <li><a href="#documents">Documents</a></li>
+      <li><a href="#presentations">Presentations</a></li>
+      <li><a href="#about">About</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ul>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════ HERO ═══════════════════════════════ -->
+<section id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+
+    <div class="hero-content">
+      <div class="hero-badge">Research Project · 25-26J-043</div>
+      <h1 class="hero-title">
+        <span class="main">CAPSLock</span>
+        <span class="sub">Container-Aware Policy Security Lock</span>
+      </h1>
+      <p class="hero-desc">
+        A Kubernetes-native multi-environment deployment system integrating ICAP-based
+        security enforcement, risk-aware promotion gates, and unified policy lifecycle
+        orchestration across development, staging, and production.
+      </p>
+      <div class="hero-meta">
+        <span>🎓 <strong>BSc (Hons) IT — Cyber Security</strong></span>
+        <span>🏛️ <strong>SLIIT · CSE Dept</strong></span>
+        <span>📅 <strong>August 2025</strong></span>
+      </div>
+      <div class="btn-group">
+        <a href="#components" class="btn btn-primary">Explore Components →</a>
+        <a href="#domain" class="btn btn-outline">Read Research</a>
+      </div>
+    </div>
+
+    <div>
+      <div class="hero-stats">
+        <div class="stat-card">
+          <div class="num"><span data-count="4">4</span></div>
+          <div class="label">Core Components</div>
+        </div>
+        <div class="stat-card">
+          <div class="num"><span data-count="6">6</span></div>
+          <div class="label">Risk Factors</div>
+        </div>
+        <div class="stat-card">
+          <div class="num"><span data-count="99.83">0</span>%</div>
+          <div class="label">Inspection Rate</div>
+        </div>
+        <div class="stat-card">
+          <div class="num"><span data-count="83.6">0</span>%</div>
+          <div class="label">Test Coverage</div>
+        </div>
+      </div>
+
+      <div class="component-badges">
+        <div class="comp-badge">
+          <div class="icon c-meds">M</div>
+          <div class="info">
+            <div class="name">MEDS — Multi-Environment Deployment System</div>
+            <div class="desc">Orchestration · Risk Scoring · Policy Promotion</div>
+          </div>
+        </div>
+        <div class="comp-badge">
+          <div class="icon c-eape">E</div>
+          <div class="info">
+            <div class="name">EAPE — Environment-Aware Policy Engine</div>
+            <div class="desc">Policy Detection · CIS/PCI-DSS Compliance · OPA/Kyverno</div>
+          </div>
+        </div>
+        <div class="comp-badge">
+          <div class="icon c-sdlb">S</div>
+          <div class="info">
+            <div class="name">SDLB — Service Discovery &amp; Load Balancing</div>
+            <div class="desc">ICAP Traffic Routing · Predictive Spread · Istio</div>
+          </div>
+        </div>
+        <div class="comp-badge">
+          <div class="icon c-icap">I</div>
+          <div class="info">
+            <div class="name">ICAP Operator — Kubernetes Content Scanning</div>
+            <div class="desc">ClamAV · Adaptive Health Scoring · Prometheus</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════ ABSTRACT / HOME INFO ══════════════════ -->
+<section id="abstract" style="padding-top:80px; padding-bottom:80px;">
+  <div class="section-inner">
+    <div class="pid-band">
+      <span>Project ID:</span>
+      <span class="pid">25-26J-043</span>
+      <span>|</span>
+      <span>Sri Lanka Institute of Information Technology</span>
+    </div>
+    <span class="section-tag">Abstract</span>
+    <h2 class="section-title">Research <span class="highlight">Overview</span></h2>
+    <div class="abstract-card">
+      <p>The accelerated delivery of cloud-native applications and services has been made possible by the increased usage of Kubernetes. However, it has brought to light important issues around the consistent enforcement of security policies across different environments. Existing solutions like ArgoCD, FluxCD, and Spinnaker, which are part of the DevOps and GitOps ecosystems, are capable of automating deployments. However, they do not enforce policies across different environments, lack ICAP services integration, and do not conduct risk-aware validation in pre-production and production environments. The inability to enforce policies consistently leads to configuration drift, fragmented security, and unmonitored vulnerabilities in the production environment.</p>
+      <br/>
+      <p>This research introduces the <strong style="color:var(--accent-green)">Multi-Environment Deployment System (MEDS)</strong>. With MEDS, Integrated Continuous Auditing Policy (ICAP) and Risk-based Validation policies are embedded directly into the deployment pipeline, automating security enforcement within the pipeline. Key features include ICAP integration, environment-aware orchestration, active environment risk validation, security policy versioning with rollback, and cross-environment visibility and audit logs. By combining security-first orchestration with GitOps principles, MEDS enables the first Kubernetes-native, self-healing security framework.</p>
+      <div class="keywords">
+        <span class="keyword">Kubernetes</span>
+        <span class="keyword">GitOps</span>
+        <span class="keyword">ICAP</span>
+        <span class="keyword">Multi-Environment Deployment</span>
+        <span class="keyword">Security Orchestration</span>
+        <span class="keyword">Policy Management</span>
+        <span class="keyword">Risk-Based Validation</span>
+        <span class="keyword">DevSecOps</span>
+        <span class="keyword">CIS Benchmark</span>
+        <span class="keyword">PCI-DSS</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ DOMAIN ════════════════════════════ -->
+<section id="domain">
+  <div class="section-inner">
+    <span class="section-tag">Domain</span>
+    <h2 class="section-title">Research <span class="highlight">Domain</span></h2>
+    <p class="section-subtitle">Literature survey findings, identified research gaps, and the methodology adopted to address them.</p>
+
+    <div class="section-divider"></div>
+
+    <!-- Literature Survey Cards -->
+    <h3 style="font-size:1.2rem; margin-bottom:1rem; color:var(--text-secondary);">Literature Survey</h3>
+    <div class="domain-grid">
+      <div class="domain-card">
+        <div class="d-icon">🔐</div>
+        <h3>Kubernetes Security Policy Gaps</h3>
+        <p>Existing GitOps tools (ArgoCD, FluxCD, Spinnaker) automate deployment but provide no mechanism for environment-aware security policy enforcement or risk-based promotion gates, creating silent security regressions between environments.</p>
+      </div>
+      <div class="domain-card">
+        <div class="d-icon">🔌</div>
+        <h3>ICAP Integration Deficit</h3>
+        <p>Traditional ICAP (RFC 3507) relies on persistent proxy connections incompatible with Kubernetes' ephemeral pod lifecycle. No native Kubernetes operator exists to manage ClamAV-backed ICAP scanning as a first-class cluster resource.</p>
+      </div>
+      <div class="domain-card">
+        <div class="d-icon">⚖️</div>
+        <h3>Fragmented Toolchains</h3>
+        <p>Organizations use siloed tools — scanners, admission controllers, service meshes, and monitors — with no unified orchestration layer. This creates overlapping or conflicting policies and compliance visibility gaps across environment tiers.</p>
+      </div>
+      <div class="domain-card">
+        <div class="d-icon">📋</div>
+        <h3>Compliance Framework Coverage</h3>
+        <p>CIS Kubernetes Benchmark v1.9 and PCI-DSS v4.0 both define controls for cluster security, but no automated system validates and enforces these across environment promotion boundaries continuously.</p>
+      </div>
+      <div class="domain-card">
+        <div class="d-icon">🔄</div>
+        <h3>Policy Evolution Problem</h3>
+        <p>Security policies diverge between dev, staging, and production environments. Development runs relaxed policies while production enforces strict controls, with staging frequently failing to achieve parity — a "false sense of security."</p>
+      </div>
+      <div class="domain-card">
+        <div class="d-icon">📊</div>
+        <h3>Risk-Aware Deployment Absence</h3>
+        <p>CI/CD pipelines validate only functional correctness. No intelligent multi-factor gate exists to prevent security regressions during promotion — version maturity, policy changes, ICAP coverage, and compliance posture are not jointly evaluated.</p>
+      </div>
+    </div>
+
+    <!-- Research Gap -->
+    <h3 style="font-size:1.2rem; margin: 2.5rem 0 0.5rem; color:var(--text-secondary);">Research Gap</h3>
+    <ul class="gap-list">
+      <li class="gap-item">
+        <h4>ICAP Integration Deficits</h4>
+        <p>No Kubernetes-native ICAP orchestration model exists. Current ICAP relies on static proxy persistence incompatible with ephemeral pods and dynamic service discovery.</p>
+      </li>
+      <li class="gap-item">
+        <h4>Fragmented Security Toolchains</h4>
+        <p>Siloed tools (scanners, admission controllers, service meshes, monitors) with no unified orchestration layer, leading to coverage gaps and policy conflicts.</p>
+      </li>
+      <li class="gap-item">
+        <h4>Multi-Environment Policy Inconsistency</h4>
+        <p>No standardized approach for security policy evolution across dev/staging/production. Environment drift causes misconfigurations to propagate silently into production.</p>
+      </li>
+      <li class="gap-item">
+        <h4>Lack of Risk-Aware Validation</h4>
+        <p>CI/CD pipelines validate functional correctness only. No intelligent promotion gates exist to prevent security regressions by evaluating composite risk before promotion.</p>
+      </li>
+    </ul>
+
+    <!-- Research Problem -->
+    <h3 style="font-size:1.2rem; margin: 2.5rem 0 0.5rem; color:var(--text-secondary);">Research Problem Statement</h3>
+    <div class="rq-block">
+      "In what ways may a Kubernetes-native deployment system be created to manage the cohesive application and policy promotion across various environments, incorporating ICAP-based security checks alongside risk-aware mechanisms for ongoing risk mitigation and continuous security guarantee throughout the software lifecycle?"
+    </div>
+
+    <!-- Objectives -->
+    <h3 style="font-size:1.2rem; margin: 2.5rem 0 1rem; color:var(--text-secondary);">Research Objectives</h3>
+    <div class="objectives-grid">
+      <div class="obj-card">
+        <div class="obj-num">01</div>
+        <h4>Multi-Cluster Deployment Support</h4>
+        <p>Design architecture supporting parallel promotions across multiple Kubernetes clusters with environment isolation.</p>
+      </div>
+      <div class="obj-card">
+        <div class="obj-num">02</div>
+        <h4>Environment Promotion Pipeline</h4>
+        <p>Implement a gated Dev → Staging → Production pipeline with security enforcement at each boundary.</p>
+      </div>
+      <div class="obj-card">
+        <div class="obj-num">03</div>
+        <h4>Policy Migration &amp; Rollback</h4>
+        <p>Build versioned policy snapshots with automatic SLO-triggered rollback when GitOps health degrades.</p>
+      </div>
+      <div class="obj-card">
+        <div class="obj-num">04</div>
+        <h4>Risk-Based Deployment Validation</h4>
+        <p>Implement 6-factor composite risk scoring with environment-specific thresholds for intelligent promotion gates.</p>
+      </div>
+      <div class="obj-card">
+        <div class="obj-num">05</div>
+        <h4>Unified Management Interface</h4>
+        <p>Develop a single-pane dashboard integrating all four components with live benchmark visibility.</p>
+      </div>
+      <div class="obj-card">
+        <div class="obj-num">06</div>
+        <h4>End-to-End Validation</h4>
+        <p>Conduct performance benchmarking and compliance validation against CIS K8s Benchmark v1.9 and PCI-DSS v4.0.</p>
+      </div>
+    </div>
+
+    <!-- Methodology -->
+    <h3 style="font-size:1.2rem; margin: 2.5rem 0 1rem; color:var(--text-secondary);">Methodology</h3>
+    <div class="method-steps">
+      <div class="method-step">
+        <div class="step-num">1</div>
+        <h4>Literature Review</h4>
+        <p>Survey of GitOps tools, ICAP protocols, K8s security frameworks, and compliance standards.</p>
+      </div>
+      <div class="method-step">
+        <div class="step-num">2</div>
+        <h4>System Design</h4>
+        <p>Architecture design for four components with defined interfaces and compliance mappings.</p>
+      </div>
+      <div class="method-step">
+        <div class="step-num">3</div>
+        <h4>Implementation</h4>
+        <p>Python/FastAPI for MEDS &amp; SDLB, Go for EAPE &amp; ICAP Operator, React for dashboard.</p>
+      </div>
+      <div class="method-step">
+        <div class="step-num">4</div>
+        <h4>Evaluation</h4>
+        <p>Live cluster benchmarking on Minikube with controlled failure injection and load testing.</p>
+      </div>
+    </div>
+
+    <!-- Technologies Used -->
+    <h3 style="font-size:1.2rem; margin: 2.5rem 0 0.5rem; color:var(--text-secondary);">Technologies Used</h3>
+    <div class="tech-pills">
+      <span class="tech-pill">Python 3.11</span>
+      <span class="tech-pill">FastAPI</span>
+      <span class="tech-pill">Go 1.21</span>
+      <span class="tech-pill">controller-runtime</span>
+      <span class="tech-pill">Kubernetes</span>
+      <span class="tech-pill">Istio</span>
+      <span class="tech-pill">Prometheus</span>
+      <span class="tech-pill">Grafana</span>
+      <span class="tech-pill">ClamAV</span>
+      <span class="tech-pill">OPA / Rego</span>
+      <span class="tech-pill">Kyverno</span>
+      <span class="tech-pill">ArgoCD / Flux</span>
+      <span class="tech-pill">React</span>
+      <span class="tech-pill">Minikube v1.29</span>
+      <span class="tech-pill">Groq (llama-3.3-70b)</span>
+      <span class="tech-pill">PCI-DSS v4.0</span>
+      <span class="tech-pill">CIS K8s Benchmark v1.9</span>
+      <span class="tech-pill">ICAP RFC 3507</span>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ MILESTONES ═════════════════════════ -->
+<section id="milestones">
+  <div class="section-inner">
+    <span class="section-tag">Milestones</span>
+    <h2 class="section-title">Project <span class="highlight">Milestones</span></h2>
+    <p class="section-subtitle">Key assessment milestones, deliverable dates, and marks allocated for each phase.</p>
+
+    <div class="timeline">
+
+      <div class="timeline-item">
+        <div class="timeline-dot done"></div>
+        <div class="timeline-content">
+          <h3>Project Kickoff &amp; Proposal</h3>
+          <div class="t-meta">
+            <span>📅 August 2025</span>
+            <span>📊 Marks: 15%</span>
+            <span><span class="badge-done">✓ Completed</span></span>
+          </div>
+          <p>Project officially commenced. Submitted project charter and detailed proposal document outlining the CAPSLock platform concept, four-component architecture, and research methodology. Approved by supervisory panel with minor revisions.</p>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot done"></div>
+        <div class="timeline-content">
+          <h3>Progress Presentation 1</h3>
+          <div class="t-meta">
+            <span>📅 October 2025</span>
+            <span>📊 Marks: 15%</span>
+            <span><span class="badge-done">✓ Completed</span></span>
+          </div>
+          <p>Presented literature survey findings, finalized research problem statement, and demonstrated initial prototypes of the MEDS risk scorer and ICAP Operator CRD. Benchmark framework designed and approved.</p>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot done"></div>
+        <div class="timeline-content">
+          <h3>Progress Presentation 2</h3>
+          <div class="t-meta">
+            <span>📅 January 2026</span>
+            <span>📊 Marks: 20%</span>
+            <span><span class="badge-done">✓ Completed</span></span>
+          </div>
+          <p>Demonstrated all four components integrated on a live Minikube cluster. Live CAPSLock dashboard showcased with MEDS Risk Score Calculator, EAPE Policy Conflict Detector, SDLB Traffic Routing Scenarios, and ICAP Health Score Scenarios panels.</p>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot done"></div>
+        <div class="timeline-content">
+          <h3>Final Assessment &amp; Dissertation</h3>
+          <div class="t-meta">
+            <span>📅 March 2026</span>
+            <span>📊 Marks: 40%</span>
+            <span><span class="badge-done">✓ Submitted</span></span>
+          </div>
+          <p>Complete dissertation submitted covering all four CAPSLock components with consolidated benchmark results. MEDS achieved 100% decision accuracy, EAPE 83.6% test coverage, SDLB 99.83% sustained success rate, and ICAP Operator full reactive scaling validation.</p>
+        </div>
+      </div>
+
+      <div class="timeline-item">
+        <div class="timeline-dot active"></div>
+        <div class="timeline-content">
+          <h3>Viva Voce Examination</h3>
+          <div class="t-meta">
+            <span>📅 April 2026</span>
+            <span>📊 Marks: 10%</span>
+            <span><span class="badge-pending">⏳ Upcoming</span></span>
+          </div>
+          <p>Oral examination defending the research contributions, novel technical innovations (USLO, adaptive health scoring, risk-based validation), and benchmark methodology before an academic panel.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ COMPONENTS ════════════════════════ -->
+<section id="components" style="background: var(--bg-secondary);">
+  <div class="section-inner">
+    <span class="section-tag">Components</span>
+    <h2 class="section-title">Platform <span class="highlight">Components</span></h2>
+    <p class="section-subtitle">Four tightly integrated Kubernetes-native components forming the complete CAPSLock security platform.</p>
+
+    <div class="tab-group">
+      <div class="tab-nav">
+        <button class="tab-btn active" data-tab="tab-meds">MEDS — Deployment System</button>
+        <button class="tab-btn" data-tab="tab-eape">EAPE — Policy Engine</button>
+        <button class="tab-btn" data-tab="tab-sdlb">SDLB — Load Balancer</button>
+        <button class="tab-btn" data-tab="tab-icap">ICAP Operator</button>
+      </div>
+
+      <!-- ── MEDS ── -->
+      <div class="tab-panel active" id="tab-meds">
+        <div class="comp-layout">
+          <div>
+            <div class="comp-header">
+              <div class="comp-tag" style="background:rgba(0,230,118,0.15); color:var(--accent-green); border:1px solid var(--accent-green);">Component 1 · Python / FastAPI · Port 8000</div>
+              <h3 class="comp-title">MEDS</h3>
+              <p class="comp-subtitle">Multi-Environment Deployment System</p>
+              <p class="comp-desc">The core orchestration engine of CAPSLock. MEDS owns the integrated frontend dashboard and the promotion-control API. It enforces a sequential Dev → Staging → Production pipeline using a 6-factor weighted risk scorer, ICAP hard gates, compliance checks, and a human approval workflow for elevated-risk promotions.</p>
+            </div>
+
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin-bottom:1rem;">Key Capabilities</h4>
+            <ul class="feature-list">
+              <li>6-factor composite risk scoring on a 0–100 scale with environment-specific thresholds (Dev: 80, Staging: 60, Production: 40)</li>
+              <li>Sequential state machine gate — no stage skipping, no backward promotions</li>
+              <li>ICAP hard gate — threat detected = immediate REJECTED regardless of risk score</li>
+              <li>USLO Engine — Unified Security Lifecycle Orchestration for policy evolution</li>
+              <li>Immutable SHA-256 hash-chained audit log for compliance reporting</li>
+              <li>SLO monitor with auto-rollback triggered on GitOps health degradation</li>
+              <li>Policy version store with full rollback capability</li>
+              <li>NLP assistant powered by Groq (llama-3.3-70b) for operator queries</li>
+              <li>Human approval workflow for promotions in the 75–100% risk tier</li>
+            </ul>
+
+            <div class="comp-metrics">
+              <h4>Decision Tier Results</h4>
+              <div class="metrics-grid">
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-green)">100%</div><div class="m-lbl">Decision Accuracy</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-cyan)">7</div><div class="m-lbl">Validated Scenarios</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-green)">23/60</div><div class="m-lbl">Safe Patch Score</div></div>
+                <div class="metric-item"><div class="m-val" style="color:#ff5252">77/40</div><div class="m-lbl">Alpha Skip (REJECTED)</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin-bottom:1rem;">6-Factor Risk Score Weights</h4>
+            <div class="scoring-bars">
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Policy Changes</span><span>25%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:25%"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Config Complexity</span><span>20%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:20%"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>ICAP Coverage</span><span>20%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:20%"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Version Delta</span><span>15%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:15%"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Environment Transition</span><span>10%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:10%"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Compliance Posture</span><span>10%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:10%"></div></div>
+              </div>
+            </div>
+
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin: 1.5rem 0 1rem;">Promotion Pipeline Flow</h4>
+            <div class="flow-steps">
+              <div class="flow-step"><div class="f-num">1</div><div class="f-content"><h5>State Machine Gate</h5><p>dev→staging→prod only; skipping &amp; backward = BLOCKED</p></div></div>
+              <div class="flow-step"><div class="f-num">2</div><div class="f-content"><h5>ICAP Hard Gate</h5><p>Threat found → immediate REJECTED</p></div></div>
+              <div class="flow-step"><div class="f-num">3</div><div class="f-content"><h5>Compliance Score Fetch</h5><p>EAPE returns CIS + PCI-DSS score</p></div></div>
+              <div class="flow-step"><div class="f-num">4</div><div class="f-content"><h5>6-Factor Risk Scoring</h5><p>Score vs environment threshold → decision tier</p></div></div>
+              <div class="flow-step"><div class="f-num">5</div><div class="f-content"><h5>USLO Policy Migration</h5><p>Apply environment-appropriate policy tier</p></div></div>
+              <div class="flow-step"><div class="f-num">6</div><div class="f-content"><h5>GitOps Deploy</h5><p>ArgoCD / Flux sync to cluster</p></div></div>
+              <div class="flow-step"><div class="f-num">7</div><div class="f-content"><h5>SLO Monitor</h5><p>Background watch → auto-rollback on health degradation</p></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── EAPE ── -->
+      <div class="tab-panel" id="tab-eape">
+        <div class="comp-layout">
+          <div>
+            <div class="comp-header">
+              <div class="comp-tag" style="background:rgba(0,229,255,0.15); color:var(--accent-cyan); border:1px solid var(--accent-cyan);">Component 2 · Go 1.21 + Python FastAPI · Port 8001</div>
+              <h3 class="comp-title">EAPE</h3>
+              <p class="comp-subtitle">Environment-Aware Policy Engine</p>
+              <p class="comp-desc">Automatically detects the environment of any Kubernetes namespace and applies the correct security policy without human labelling. Validates against CIS Kubernetes Benchmark v1.9 (28 controls) and PCI-DSS v4.0 (16 requirements), generates OPA/Kyverno manifests, and resolves policy conflicts.</p>
+            </div>
+
+            <ul class="feature-list">
+              <li>7-factor environment detection algorithm — confidence score surfaced to MEDS</li>
+              <li>Three policy tiers: dev (CIS, audit), staging (CIS+PCI, enforce), prod (CIS+PCI, strict block)</li>
+              <li>28-control CIS K8s Benchmark v1.9 validation (RBAC, Pods, Network, Secrets, Namespaces)</li>
+              <li>16-requirement PCI-DSS v4.0 validation (storage, transmission, secure systems, audit logging)</li>
+              <li>5-dimension conflict detection: scanning_mode, environment, compliance, resource_limit, security_level</li>
+              <li>3 conflict resolution strategies: precedence, security-first, environment-aware</li>
+              <li>Generates Rego (OPA) and Kyverno ClusterPolicy manifests automatically</li>
+              <li>Background namespace watcher — re-applies policy on environment drift</li>
+              <li>Policy Inheritance: base-policy.yaml deep-merged by environment templates</li>
+            </ul>
+
+            <div class="comp-metrics">
+              <h4>Performance Benchmarks</h4>
+              <div class="metrics-grid">
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-green)">882 ns</div><div class="m-lbl">Policy Selection /op</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-cyan)">7.2 µs</div><div class="m-lbl">Conflict Detection /op</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-green)">163 ms</div><div class="m-lbl">Full 7-Step Workflow</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-cyan)">83.6%</div><div class="m-lbl">Unit Test Coverage</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin-bottom:1rem;">Detection Factor Weights</h4>
+            <div class="scoring-bars">
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Primary K8s Label (environment=)</span><span>60%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:60%"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Namespace Name Token (prod/staging/dev)</span><span>20%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:20%"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Security-Level Label</span><span>20%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:20%"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Compliance Labels (PCI-DSS / CIS)</span><span>10% each</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:20%"></div></div>
+              </div>
+            </div>
+
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin: 1.5rem 0 1rem;">Policy Template Tiers</h4>
+            <div style="display:flex; flex-direction:column; gap:0.6rem;">
+              <div class="flow-step" style="border-color:rgba(0,230,118,0.3);">
+                <div class="f-num" style="background:var(--accent-green); font-size:0.7rem;">DEV</div>
+                <div class="f-content">
+                  <h5>dev-policy — Audit Mode</h5>
+                  <p>CIS only · ICAP log-only · Permissive enforcement</p>
+                </div>
+              </div>
+              <div class="flow-step" style="border-color:rgba(0,229,255,0.3);">
+                <div class="f-num" style="background:var(--accent-cyan); color:#060b18; font-size:0.7rem;">STG</div>
+                <div class="f-content">
+                  <h5>staging-policy — Enforce Mode</h5>
+                  <p>CIS + PCI-DSS · ICAP warn · Enforce enforcement</p>
+                </div>
+              </div>
+              <div class="flow-step" style="border-color:rgba(41,121,255,0.3);">
+                <div class="f-num" style="background:var(--accent-blue); font-size:0.7rem;">PRD</div>
+                <div class="f-content">
+                  <h5>prod-policy — Strict Mode</h5>
+                  <p>CIS + PCI-DSS · ICAP block · Strict enforcement</p>
+                </div>
+              </div>
+            </div>
+
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin: 1.5rem 0 0.8rem;">Package Test Coverage</h4>
+            <div class="scoring-bars">
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>pkg/mocks</span><span>95.8%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:95.8%; background:var(--accent-cyan)"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>pkg/conflict</span><span>89.9%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:89.9%; background:var(--accent-cyan)"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>pkg/policy</span><span>83.5%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:83.5%; background:var(--accent-cyan)"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>pkg/detector</span><span>80.0%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:80%; background:var(--accent-cyan)"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SDLB ── -->
+      <div class="tab-panel" id="tab-sdlb">
+        <div class="comp-layout">
+          <div>
+            <div class="comp-header">
+              <div class="comp-tag" style="background:rgba(41,121,255,0.15); color:var(--accent-blue); border:1px solid var(--accent-blue);">Component 3 · Python / FastAPI · Port 8082</div>
+              <h3 class="comp-title">SDLB</h3>
+              <p class="comp-subtitle">Service Discovery &amp; Load Balancing</p>
+              <p class="comp-desc">Health-aware, predictive load balancer for ICAP scanning instances. Uses a traffic-trend hysteresis state machine with single-instance and spread routing modes, gated on aggregate ICAP health from Prometheus metrics. Generates Istio DestinationRule and VirtualService YAML dynamically.</p>
+            </div>
+
+            <ul class="feature-list">
+              <li>Two routing modes: Single (all traffic → healthiest instance) and Spread (round-robin across all)</li>
+              <li>Predictive spread entry — traffic growth ≥ 8% triggers automatic spread mode</li>
+              <li>Force spread when aggregate ICAP health falls below 70/100</li>
+              <li>Spread exit — growth ≤ 3% for 120s collapses to the healthiest single instance</li>
+              <li>Health penalty formula: effective_rate = observed_rate × (1 + (floor − health) / floor)</li>
+              <li>Environment-aware policies: Production (strict round-robin), Staging (50/30/20 weighted), Dev (permissive single)</li>
+              <li>Guardrails: 60s cooldown between switches, 20% minimum improvement threshold</li>
+              <li>PCI-DSS v4.0 and CIS K8s v1.9 compliance event logging for all routing decisions</li>
+            </ul>
+
+            <div class="comp-metrics">
+              <h4>Benchmark Results</h4>
+              <div class="metrics-grid">
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-green)">99.83%</div><div class="m-lbl">Sustained Success Rate</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-blue)">7.99%</div><div class="m-lbl">Routing Overhead (Good)</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-green)">29.7s</div><div class="m-lbl">Mean Failover Detection</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-blue)">11.0%</div><div class="m-lbl">Latency Improvement (3 inst.)</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin-bottom:1rem;">Routing State Machine Hierarchy</h4>
+            <div class="flow-steps">
+              <div class="flow-step" style="border-color:rgba(255,82,82,0.4);">
+                <div class="f-num" style="background:#ff5252; font-size:0.7rem;">P1</div>
+                <div class="f-content"><h5>ICAP Health &lt; 70 → Force Spread</h5><p>Health-based override — highest priority</p></div>
+              </div>
+              <div class="flow-step" style="border-color:rgba(255,152,0,0.4);">
+                <div class="f-num" style="background:#ff9800; color:#060b18; font-size:0.7rem;">P2</div>
+                <div class="f-content"><h5>Traffic Growth &gt; 8% → Enter Spread</h5><p>Load distribution on demand</p></div>
+              </div>
+              <div class="flow-step" style="border-color:rgba(0,229,255,0.4);">
+                <div class="f-num" style="background:var(--accent-cyan); color:#060b18; font-size:0.7rem;">P3</div>
+                <div class="f-content"><h5>Growth ≤ 3% in Spread → Collapse to Single</h5><p>Route to healthiest instance</p></div>
+              </div>
+              <div class="flow-step">
+                <div class="f-num" style="background:var(--text-muted); font-size:0.7rem;">P4</div>
+                <div class="f-content"><h5>Default → Single Mode</h5><p>Lowest health-weighted effective rate wins</p></div>
+              </div>
+            </div>
+
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin: 1.5rem 0 1rem;">Routing Correctness (n=2,400 requests)</h4>
+            <div style="display:flex; flex-direction:column; gap:0.6rem;">
+              <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:1rem;">
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.4rem;">
+                  <span style="font-weight:700;">Production (Round-Robin)</span>
+                  <span style="color:var(--accent-green); font-weight:700;">PASS ✓</span>
+                </div>
+                <div style="font-size:0.78rem; color:var(--text-muted);">33.8% / 33.1% / 33.1% — variance 0.7% &lt; 2.0%</div>
+              </div>
+              <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:1rem;">
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.4rem;">
+                  <span style="font-weight:700;">Staging (Weighted 50/30/20)</span>
+                  <span style="color:var(--accent-green); font-weight:700;">PASS ✓</span>
+                </div>
+                <div style="font-size:0.78rem; color:var(--text-muted);">51.0% / 29.3% / 19.7% — max deviation ±1.0%</div>
+              </div>
+              <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:1rem;">
+                <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:0.4rem;">
+                  <span style="font-weight:700;">Development (Permissive Single)</span>
+                  <span style="color:var(--accent-green); font-weight:700;">PASS ✓</span>
+                </div>
+                <div style="font-size:0.78rem; color:var(--text-muted);">97.6% primary — latency improvement 21% vs production</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ICAP OPERATOR ── -->
+      <div class="tab-panel" id="tab-icap">
+        <div class="comp-layout">
+          <div>
+            <div class="comp-header">
+              <div class="comp-tag" style="background:rgba(213,0,249,0.15); color:var(--accent-purple); border:1px solid var(--accent-purple);">Component 4 · Go / controller-runtime · Port 1344</div>
+              <h3 class="comp-title">ICAP Operator</h3>
+              <p class="comp-subtitle">Kubernetes-Native Content Scanning</p>
+              <p class="comp-desc">A Kubernetes-native controller managing the full lifecycle of ClamAV-backed ICAP scanning services as first-class cluster resources. Extends the Kubernetes API with the ICAPService CRD (security.capslock.io/v1alpha1). The <strong>adaptive health scoring system</strong> is the core novel contribution — 6-dimensional context-aware composite scoring with dynamic weight redistribution.</p>
+            </div>
+
+            <ul class="feature-list">
+              <li>ICAPService CRD — manages Deployment (c-icap + ClamAV), ClusterIP Service (port 1344), and HPA</li>
+              <li>6-dimension adaptive health scoring: Readiness (25%), Latency (25%), Signatures (20%), Errors (15%), Resources (10%), Queue (5%)</li>
+              <li>Context-aware weight redistribution: traffic pattern, threat level, and resource state shift weights dynamically</li>
+              <li>Reactive scaling: health &lt; 50 → +2 replicas; health &lt; 70 → +1 replica (out-of-band, in addition to HPA)</li>
+              <li>30-second reconciliation loop with 4 sub-reconcilers</li>
+              <li>5 Prometheus metrics emitted every cycle + Grafana dashboard (monitoring/grafana-dashboard.json)</li>
+              <li>ClamAV signature freshness tracked as scored dimension — alerts if age &gt; 24h</li>
+              <li>PCI-DSS Req 10.6.1 threat spike alert with direct compliance label</li>
+              <li>Least-privilege RBAC with admin/editor/viewer role levels</li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin-bottom:1rem;">Adaptive Health Scoring (Baseline Weights)</h4>
+            <div class="scoring-bars">
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Readiness (pod availability)</span><span>25%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:25%; background:var(--accent-purple)"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Latency (vs SLO threshold)</span><span>25%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:25%; background:var(--accent-purple)"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Signatures (ClamAV freshness)</span><span>20%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:20%; background:var(--accent-purple)"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Errors (scan failure rate)</span><span>15%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:15%; background:var(--accent-purple)"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Resources (CPU/memory state)</span><span>10%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:10%; background:var(--accent-purple)"></div></div>
+              </div>
+              <div class="score-bar-item">
+                <div class="score-bar-label"><span>Queue (scan backlog depth)</span><span>5%</span></div>
+                <div class="score-bar-track"><div class="score-bar-fill" style="width:5%; background:var(--accent-purple)"></div></div>
+              </div>
+            </div>
+
+            <h4 style="font-size:0.82rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted); margin: 1.5rem 0 0.8rem;">Validated Health Scenarios</h4>
+            <div style="display:flex; flex-direction:column; gap:0.5rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:0.7rem 1rem; font-size:0.82rem;">
+                <span>Fully Healthy (all replicas up)</span>
+                <span style="color:var(--accent-green); font-weight:700; font-family:var(--font-mono);">99.2 / 100</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:0.7rem 1rem; font-size:0.82rem;">
+                <span>Traffic Spike</span>
+                <span style="color:var(--accent-green); font-weight:700; font-family:var(--font-mono);">91.7 / 100</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:0.7rem 1rem; font-size:0.82rem;">
+                <span>One Replica Down</span>
+                <span style="color:var(--accent-cyan); font-weight:700; font-family:var(--font-mono);">80.9 / 100</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:0.7rem 1rem; font-size:0.82rem;">
+                <span>Stale Signatures (48h)</span>
+                <span style="color:var(--accent-cyan); font-weight:700; font-family:var(--font-mono);">84.2 / 100</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:0.7rem 1rem; font-size:0.82rem;">
+                <span>Degraded (spike + stale + constrained)</span>
+                <span style="color:orange; font-weight:700; font-family:var(--font-mono);">61.9 → Scale +1</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:0.7rem 1rem; font-size:0.82rem;">
+                <span>Total Outage (all unavailable)</span>
+                <span style="color:#ff5252; font-weight:700; font-family:var(--font-mono);">70 → Scale +1</span>
+              </div>
+            </div>
+
+            <div class="comp-metrics" style="margin-top:1.2rem;">
+              <h4>Reactive Scaling Thresholds</h4>
+              <div class="metrics-grid">
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-purple)">≥ 70</div><div class="m-lbl">HPA governs (no reactive)</div></div>
+                <div class="metric-item"><div class="m-val" style="color:orange">50–69</div><div class="m-lbl">Scale +1 (warning)</div></div>
+                <div class="metric-item"><div class="m-val" style="color:#ff5252">&lt; 50</div><div class="m-lbl">Scale +2 (critical)</div></div>
+                <div class="metric-item"><div class="m-val" style="color:var(--accent-purple)">30s</div><div class="m-lbl">Reconcile Interval</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end tab-group -->
+  </div>
+</section>
+
+<!-- ═══════════════════════════ INNOVATION ════════════════════════ -->
+<section id="innovation">
+  <div class="section-inner">
+    <span class="section-tag">Innovation</span>
+    <h2 class="section-title">Novel <span class="highlight">Contributions</span></h2>
+    <p class="section-subtitle">Three distinct technical innovations that differentiate CAPSLock from existing Kubernetes security tools.</p>
+
+    <div class="innovation-cards">
+      <div class="inv-card">
+        <div class="inv-num">01</div>
+        <h3>USLO Framework</h3>
+        <p>Unified Security Lifecycle Orchestration — the first framework to evolve security policies coherently from dev → staging → production with automatic enforce/audit mode graduation and ICAP integration natively embedded in the promotion pipeline.</p>
+      </div>
+      <div class="inv-card">
+        <div class="inv-num">02</div>
+        <h3>Risk-Based Validation</h3>
+        <p>Intelligent multi-factor promotion gates analyzing compliance score, configuration complexity, ICAP coverage, version maturity, environment transition risk, and policy churn before any deployment is approved — preventing security regressions silently propagating to production.</p>
+      </div>
+      <div class="inv-card">
+        <div class="inv-num">03</div>
+        <h3>Adaptive Health Scoring</h3>
+        <p>A 6-dimensional context-aware health scoring system for ICAP operators that dynamically redistributes dimension weights based on runtime context — giving security dimensions priority during threat elevation and performance dimensions priority during traffic spikes.</p>
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <h3 style="font-size:1.2rem; margin: 3rem 0 0.5rem; color:var(--text-secondary);">Comparison with Existing Solutions</h3>
+    <div class="comp-table-wrap">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>GitOps (ArgoCD / FluxCD)</th>
+            <th>Helm + CI/CD</th>
+            <th>CAPSLock / MEDS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Multi-Env Policy Consistency</td><td class="no">Manual, inconsistent</td><td class="no">Per-environment only</td><td>USLO framework — automated</td></tr>
+          <tr><td>ICAP Integration</td><td class="no">None</td><td class="no">Manual scripts</td><td>Native Kubernetes operator</td></tr>
+          <tr><td>Risk-Based Validation</td><td class="no">None</td><td class="no">Basic health checks</td><td>6-factor predictive scoring</td></tr>
+          <tr><td>Automated Rollback</td><td class="no">Git revert only</td><td class="no">Manual steps</td><td>SLO-triggered automatic</td></tr>
+          <tr><td>Policy Versioning</td><td class="no">Not supported</td><td class="no">Not supported</td><td>Built-in snapshots + SHA-256</td></tr>
+          <tr><td>Audit &amp; Compliance</td><td class="no">Git history only</td><td class="no">Limited CI logs</td><td>Immutable hash-chained log</td></tr>
+          <tr><td>CIS/PCI-DSS Validation</td><td class="no">None</td><td class="no">None</td><td>28 CIS + 16 PCI-DSS controls</td></tr>
+          <tr><td>Adaptive Health Scoring</td><td class="no">CPU/memory only</td><td class="no">None</td><td>6-dimensional with context weights</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ DOCUMENTS ═════════════════════════ -->
+<section id="documents">
+  <div class="section-inner">
+    <span class="section-tag">Documents</span>
+    <h2 class="section-title">Project <span class="highlight">Documents</span></h2>
+    <p class="section-subtitle">Research deliverables, technical reports, and compliance documentation produced throughout the project lifecycle.</p>
+
+    <div class="docs-grid">
+      <a class="doc-card" href="#documents">
+        <div class="doc-icon pdf">📄</div>
+        <div class="doc-info">
+          <div class="doc-name">Project Charter</div>
+          <div class="doc-type">PDF · Semester 1 · 2024</div>
+        </div>
+        <span class="doc-status badge-done">Available</span>
+      </a>
+      <a class="doc-card" href="#documents">
+        <div class="doc-icon doc">📋</div>
+        <div class="doc-info">
+          <div class="doc-name">Research Proposal Document</div>
+          <div class="doc-type">PDF · Semester 1 · 2024</div>
+        </div>
+        <span class="doc-status badge-done">Available</span>
+      </a>
+      <a class="doc-card" href="#documents">
+        <div class="doc-icon pdf">📊</div>
+        <div class="doc-info">
+          <div class="doc-name">CAPSLock Benchmark Reference</div>
+          <div class="doc-type">PDF · Technical Specification · April 2026</div>
+        </div>
+        <span class="doc-status badge-done">Available</span>
+      </a>
+      <a class="doc-card" href="#documents">
+        <div class="doc-icon doc">🔍</div>
+        <div class="doc-info">
+          <div class="doc-name">Status Check List — Progress 1</div>
+          <div class="doc-type">PDF · Semester 2 · 2024</div>
+        </div>
+        <span class="doc-status badge-done">Available</span>
+      </a>
+      <a class="doc-card" href="#documents">
+        <div class="doc-icon pdf">📝</div>
+        <div class="doc-info">
+          <div class="doc-name">Status Check List — Progress 2</div>
+          <div class="doc-type">PDF · Semester 1 · 2025</div>
+        </div>
+        <span class="doc-status badge-done">Available</span>
+      </a>
+      <a class="doc-card" href="#documents">
+        <div class="doc-icon doc">🏆</div>
+        <div class="doc-info">
+          <div class="doc-name">Final Dissertation — Main Document</div>
+          <div class="doc-type">PDF · August 2025</div>
+        </div>
+        <span class="doc-status badge-done">Available</span>
+      </a>
+      <a class="doc-card" href="#documents">
+        <div class="doc-icon pdf">🔐</div>
+        <div class="doc-info">
+          <div class="doc-name">Component Report — MEDS (C1)</div>
+          <div class="doc-type">PDF · August 2025</div>
+        </div>
+        <span class="doc-status badge-done">Available</span>
+      </a>
+      <a class="doc-card" href="#documents">
+        <div class="doc-icon pdf">⚙️</div>
+        <div class="doc-info">
+          <div class="doc-name">Component Report — EAPE / SDLB / ICAP (C2–C4)</div>
+          <div class="doc-type">PDF · August 2025</div>
+        </div>
+        <span class="doc-status badge-done">Available</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ PRESENTATIONS ════════════════════════ -->
+<section id="presentations" style="background: var(--bg-secondary);">
+  <div class="section-inner">
+    <span class="section-tag">Presentations</span>
+    <h2 class="section-title">Presentation <span class="highlight">Slides</span></h2>
+    <p class="section-subtitle">Slide decks used in each formal assessment presentation, with provisions for future presentations.</p>
+
+    <div class="slides-grid">
+      <div class="slide-card">
+        <h3>Proposal Presentation</h3>
+        <div class="s-meta">📅 Semester 1, 2024 · Assessment: 15%</div>
+        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">Initial proposal covering the research problem, CAPSLock architecture overview, four-component plan, and preliminary literature review. Includes motivation from gaps in existing GitOps and ICAP tooling.</p>
+        <span class="s-status badge-done">✓ Completed</span>
+      </div>
+      <div class="slide-card">
+        <h3>Progress Presentation 1</h3>
+        <div class="s-meta">📅 Semester 2, 2024 · Assessment: 15%</div>
+        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">Literature survey findings, finalized research problem statement, and demonstration of initial MEDS risk scorer prototype and ICAP Operator CRD design. Benchmark framework introduced.</p>
+        <span class="s-status badge-done">✓ Completed</span>
+      </div>
+      <div class="slide-card">
+        <h3>Progress Presentation 2</h3>
+        <div class="s-meta">📅 Semester 1, 2025 · Assessment: 20%</div>
+        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">Full four-component integration demo on live Minikube cluster. Showcased CAPSLock dashboard with all four interactive panels: Risk Score Calculator, Policy Conflict Detector, Traffic Routing Scenarios, and ICAP Health Score Scenarios.</p>
+        <span class="s-status badge-done">✓ Completed</span>
+      </div>
+      <div class="slide-card">
+        <h3>Final Presentation</h3>
+        <div class="s-meta">📅 August 2025 · Assessment: 40%</div>
+        <p style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:1rem;">Comprehensive final assessment covering all benchmark results, novel contributions (USLO, adaptive health scoring, risk-based validation), compliance framework mappings, and future research directions.</p>
+        <span class="s-status badge-done">✓ Completed</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ ABOUT ══════════════════════════════ -->
+<section id="about">
+  <div class="section-inner">
+    <span class="section-tag">About Us</span>
+    <h2 class="section-title">Research <span class="highlight">Team</span></h2>
+    <p class="section-subtitle">Four final-year undergraduate researchers at SLIIT, each responsible for one CAPSLock platform component, collaborating on a unified Kubernetes container security gateway.</p>
+
+    <div class="team-grid">
+      <!-- Member 1: Marlon -->
+      <div class="member-card">
+        <div class="member-avatar">
+          <img src="images/marlon.jpg" alt="Marlon Deashapriya Kulatunga">
+        </div>
+        <h3>Marlon Deashapriya Kulatunga</h3>
+        <div class="role">MEDS Lead</div>
+        <div class="component-tag">Component 1 · MEDS</div>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.6rem;">Developed the Multi-Environment Deployment System and the shared React-based frontend interface. Research interests: multi-environment deployment automation, declarative infrastructure management, and cloud-native application delivery.</p>
+        <div class="email">Department of Computer Systems Engineering · SLIIT</div>
+      </div>
+
+      <!-- Member 2: Kaavya -->
+      <div class="member-card">
+        <div class="member-avatar">
+          <img src="images/kaavya.jpg" alt="Kaavya Raigambandarage">
+        </div>
+        <h3>Kaavya Raigambandarage</h3>
+        <div class="role">EAPE Lead</div>
+        <div class="component-tag">Component 2 · EAPE</div>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.6rem;">Developed the Environment-Aware Policy Engine with seven-factor environment classification and compliance-aligned policy translation to OPA Gatekeeper and Kyverno. Research interests: cloud-native security, policy-as-code, and Kubernetes workload governance.</p>
+        <div class="email">Department of Computer Systems Engineering · SLIIT</div>
+      </div>
+
+      <!-- Member 3: Senali -->
+      <div class="member-card">
+        <div class="member-avatar">
+          <img src="images/senali.jpg" alt="Senali Guruge">
+        </div>
+        <h3>Senali Guruge</h3>
+        <div class="role">ICAP Operator Lead</div>
+        <div class="component-tag">Component 4 · ICAP</div>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.6rem;">Developed the Kubernetes ICAP Operator — a custom controller enabling real-time content scanning and malware inspection within containerised workloads. Research interests: cloud-native security, content inspection, and Kubernetes-native operator design.</p>
+        <div class="email">Department of Computer Systems Engineering · SLIIT</div>
+      </div>
+
+      <!-- Member 4: Themiya -->
+      <div class="member-card">
+        <div class="member-avatar">
+          <img src="images/themiya.jpg" alt="Themiya Alwis">
+        </div>
+        <h3>Themiya Alwis</h3>
+        <div class="role">SDLB Lead</div>
+        <div class="component-tag">Component 3 · SDLB</div>
+        <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:0.6rem;">Developed the Service Discovery and Load Balancing component, enabling intelligent traffic routing and failover management within the CAPSLock gateway. Research interests: distributed systems, service mesh architecture, and cloud-native networking.</p>
+        <div class="email">Department of Computer Science &amp; Software Engineering · SLIIT</div>
+      </div>
+    </div>
+
+    <!-- Supervisors -->
+    <div class="supervisors-grid">
+      <div class="supervisor-card">
+        <div class="supervisor-photo">
+          <img src="images/amila.jpg" alt="Amila Senarathne">
+        </div>
+        <div>
+          <h4>Supervisor</h4>
+          <h3>Mr. Amila Senarathne</h3>
+          <p>Senior Lecturer in Information Security, Computer Systems and Networking. Cisco Certified Academy Instructor / Success Lead and Academy Support Center Specialist for SLIIT Cisco Academy.</p>
+          <div class="sv-dept">Department of Information Systems Engineering · SLIIT</div>
+        </div>
+      </div>
+      <div class="supervisor-card co">
+        <div class="supervisor-photo">
+          <img src="images/kavinga.jpg" alt="Kavinga Yapa Abeywardena">
+        </div>
+        <div>
+          <h4>Co-Supervisor</h4>
+          <h3>Mr. Kavinga Yapa Abeywardena</h3>
+          <p>Lecturer in Information Systems Engineering. Holds an MSc in Network and Information Security (with distinction). Research interests: cloud security, enterprise risk management, social engineering, and privacy management in big data.</p>
+          <div class="sv-dept">Department of Information Systems Engineering · SLIIT</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="institution-badge">
+      <div class="inst-icon">🏛️</div>
+      <div class="inst-info">
+        <h4>Sri Lanka Institute of Information Technology (SLIIT)</h4>
+        <p>BSc (Hons) in Information Technology, Specialising in Cyber Security · CSE Department, IT Faculty · August 2025</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════ CONTACT ════════════════════════════ -->
+<section id="contact">
+  <div class="section-inner">
+    <span class="section-tag">Contact Us</span>
+    <h2 class="section-title">Get in <span class="highlight">Touch</span></h2>
+    <p class="section-subtitle">Reach out for research collaboration, project inquiries, or academic correspondence.</p>
+
+    <div class="contact-grid">
+      <div class="contact-info">
+        <div class="contact-item">
+          <div class="c-icon">🏛️</div>
+          <div class="c-text">
+            <h4>Institution</h4>
+            <p>Sri Lanka Institute of Information Technology (SLIIT)</p>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div class="c-icon">🏢</div>
+          <div class="c-text">
+            <h4>Department</h4>
+            <p>CSE Department, Faculty of Information Technology</p>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div class="c-icon">📚</div>
+          <div class="c-text">
+            <h4>Degree Programme</h4>
+            <p>BSc (Hons) in Information Technology<br/><span style="color:var(--accent-green); font-size:0.82rem;">Specialising in Cyber Security</span></p>
+          </div>
+        </div>
+        <div class="contact-item">
+          <div class="c-icon">🔬</div>
+          <div class="c-text">
+            <h4>Project ID</h4>
+            <p style="font-family:var(--font-mono); color:var(--accent-green);">25-26J-043</p>
+          </div>
+        </div>
+      </div>
+
+      <form class="contact-form" id="contactForm">
+        <div class="form-group">
+          <label>Your Name</label>
+          <input type="text" placeholder="Full name" required/>
+        </div>
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" placeholder="your@email.com" required/>
+        </div>
+        <div class="form-group">
+          <label>Subject</label>
+          <select>
+            <option>Research Collaboration</option>
+            <option>Technical Inquiry</option>
+            <option>Academic Correspondence</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Message</label>
+          <textarea placeholder="Your message..." required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Send Message</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════ FOOTER ══════════════════════════ -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">CAPSLock</div>
+    <p>Container-Aware Policy Security Lock · Project 25-26J-043</p>
+    <p>BSc (Hons) Information Technology (Cyber Security) · SLIIT · August 2025</p>
+    <p style="margin-top:1rem; color:var(--border);">Kulatunga K K M D · Raigambandarage N K · Guruge S A L · Pandukabhaya H D T</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
