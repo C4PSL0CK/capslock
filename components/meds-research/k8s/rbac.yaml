@@ -1,0 +1,84 @@
+# MEDS RBAC Configuration
+# Grants MEDS the minimum permissions needed to read namespaces
+# and query Policy Engine integration endpoints.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: meds-controller
+  namespace: capslock-system
+  labels:
+    app: meds
+    component: controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: meds-controller-role
+  labels:
+    app: meds
+rules:
+  # Read namespaces for environment detection
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+  # Read pods and deployments for GitOps health checking
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  # Read ICAPService CRDs for ICAP health
+  - apiGroups: ["security.capslock.io"]
+    resources: ["icapservices"]
+    verbs: ["get", "list", "watch"]
+  # Read and write ConfigMaps for policy version storage
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  # Events for audit trail
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: meds-controller-rolebinding
+  labels:
+    app: meds
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: meds-controller-role
+subjects:
+  - kind: ServiceAccount
+    name: meds-controller
+    namespace: capslock-system
+---
+# Network policy: allow MEDS to reach Policy Engine and ICAP Operator
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: meds-egress
+  namespace: capslock-system
+spec:
+  podSelector:
+    matchLabels:
+      app: meds
+  policyTypes:
+    - Egress
+  egress:
+    # Allow calls to Policy Engine
+    - ports:
+        - port: 8001
+          protocol: TCP
+    # Allow calls to ICAP Operator (via Policy Engine bridge)
+    - ports:
+        - port: 1344
+          protocol: TCP
+    # Allow DNS resolution
+    - ports:
+        - port: 53
+          protocol: UDP

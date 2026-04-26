@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Scrape MEDS metrics endpoint
+  - job_name: "meds"
+    static_configs:
+      - targets: ["meds:8000"]
+    metrics_path: /metrics
+
+  # Scrape policy-engine metrics (if exposed)
+  - job_name: "policy-engine"
+    static_configs:
+      - targets: ["policy-engine:8000"]
+    metrics_path: /metrics
+
+  # Scrape SSDLB controller (FastAPI exposes no metrics natively,
+  # but this is a placeholder for future instrumentation)
+  - job_name: "ssdlb"
+    static_configs:
+      - targets: ["ssdlb:8082"]
+    metrics_path: /metrics
+
+  # Prometheus self-scrape
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

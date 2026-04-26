@@ -1,0 +1,48 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+    name: eapedevpolicy
+    annotations:
+        description: Development environment policy with minimal restrictions for rapid iteration
+        eape.environment: dev
+        eape.policy: dev-policy
+        eape.version: "1.0"
+spec:
+    crd:
+        spec:
+            names:
+                kind: EAPEDevPolicy
+                plural: eapedevpolicys
+            validation:
+                openAPIV3Schema:
+                    type: object
+                    properties:
+                        maxFileSize:
+                            type: string
+                            description: Maximum file size for ICAP scanning
+                        scanningMode:
+                            type: string
+                            description: 'Scanning mode: log-only, warn, or block'
+    targets:
+        - target: admission.k8s.gatekeeper.sh
+          rego: |+
+            package eapepolicy
+
+            info[{"msg": msg}] {
+              container := input.review.object.spec.containers[_]
+              not container.securityContext.runAsNonRoot
+              msg := sprintf("Container %v is running as root (log-only mode)", [container.name])
+            }
+
+            violation[{"msg": msg}] {
+              container := input.review.object.spec.containers[_]
+              container.resources.limits.ephemeral-storage
+              exceeds_limit(container.resources.limits.ephemeral-storage, "100MB")
+              msg := sprintf("Container %v exceeds maximum file size limit", [container.name])
+            }
+
+            exceeds_limit(value, limit) {
+              # File size comparison logic would go here
+              true
+            }
+

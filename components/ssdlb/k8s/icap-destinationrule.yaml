@@ -1,0 +1,20 @@
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: icap-service
+  namespace: default
+spec:
+  host: icap-service
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+  subsets:
+  - name: a
+    labels:
+      version: a
+  - name: b
+    labels:
+      version: b
+  - name: c
+    labels:
+      version: c

@@ -1,0 +1,93 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capslock-icap-alerts
+  namespace: capslock-system
+  labels:
+    app: capslock-icap
+    release: prometheus
+spec:
+  groups:
+    - name: capslock.icap.health
+      interval: 30s
+      rules:
+        - alert: ICAPHealthScoreCritical
+          expr: capslock_icap_health_score < 50
+          for: 2m
+          labels:
+            severity: critical
+            component: icap-operator
+          annotations:
+            summary: "ICAP health score is critical ({{ $value }})"
+            description: "The ICAP operator aggregate health score has been below 50 for 2+ minutes. Automatic scale-up has been triggered. Manual investigation required."
+            runbook_url: "https://github.com/C4PSL0CK/capslock/wiki/runbooks/icap-health-critical"
+
+        - alert: ICAPHealthScoreDegraded
+          expr: capslock_icap_health_score < 70
+          for: 5m
+          labels:
+            severity: warning
+            component: icap-operator
+          annotations:
+            summary: "ICAP health score degraded ({{ $value }})"
+            description: "The ICAP operator aggregate health score has been below 70 for 5+ minutes."
+
+        - alert: ICAPReplicasMismatch
+          expr: |
+            kube_deployment_status_replicas_ready{deployment=~".*icap.*"}
+            < kube_deployment_spec_replicas{deployment=~".*icap.*"}
+          for: 3m
+          labels:
+            severity: warning
+            component: icap-operator
+          annotations:
+            summary: "ICAP deployment has fewer ready replicas than desired"
+            description: "{{ $labels.deployment }} has {{ $value }} ready replicas but desired more. Pod scheduling may be failing."
+
+    - name: capslock.icap.security
+      rules:
+        - alert: ICAPThreatDetectionSpike
+          expr: increase(capslock_icap_threats_detected_total[5m]) > 5
+          labels:
+            severity: critical
+            component: icap-operator
+            pci_dss: "10.6.1"
+          annotations:
+            summary: "ICAP detected >5 threats in 5 minutes"
+            description: "Unusual spike in threat detections: {{ $value }} threats in 5m. Possible coordinated attack. Review scanning logs immediately."
+            pci_dss_requirement: "PCI-DSS 10.6.1: Review logs for all system components daily"
+
+        - alert: ICAPClamAVSignatureStale
+          expr: capslock_icap_clamav_signature_age_hours > 24
+          for: 1h
+          labels:
+            severity: warning
+            component: icap-operator
+          annotations:
+            summary: "ClamAV signatures are >24h old"
+            description: "ClamAV virus definitions have not been updated for {{ $value }} hours. Update freshclam configuration."
+
+        - alert: ICAPScanCoverageDropped
+          expr: capslock_icap_coverage_score < 70
+          for: 10m
+          labels:
+            severity: warning
+            component: icap-operator
+          annotations:
+            summary: "ICAP scan coverage dropped below 70%"
+            description: "ICAP scan coverage score is {{ $value }}%. Promotions may be auto-approved with insufficient scanning."
+
+    - name: capslock.icap.slo
+      rules:
+        - alert: ICAPScanLatencyP95High
+          expr: |
+            histogram_quantile(0.95,
+              rate(capslock_icap_scan_duration_seconds_bucket[5m])
+            ) > 2.0
+          for: 5m
+          labels:
+            severity: warning
+            component: icap-operator
+          annotations:
+            summary: "ICAP p95 scan latency exceeds 2s"
+            description: "p95 ICAP scan latency is {{ $value }}s. This may impact promotion throughput."

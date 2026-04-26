@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+
+# Runtime data
+components/meds-research/data/
+
+# Runtime state
+state.json
+
+# Secrets
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Logs
+*.log

@@ -1,0 +1,18 @@
+apiVersion: security.capslock.io/v1alpha1
+kind: ICAPService
+metadata:
+  name: test-scanner
+  namespace: default
+spec:
+  replicas: 2
+  clamavConfig:
+    signatureUpdateInterval: "2h"
+    image: "clamav/clamav:latest"
+  healthThresholds:
+    maxLatency: "500ms"
+    maxErrorRate: "0.05"
+    maxSignatureAge: "24h"
+  scalingPolicy:
+    minReplicas: 1
+    maxReplicas: 5
+    targetHealthScore: 80

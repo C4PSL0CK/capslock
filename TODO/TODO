@@ -1,0 +1,114 @@
+capslock/
+│
+├── docs/
+│   ├── architecture/
+│   ├── research/
+│   ├── policies/
+│   ├── diagrams/
+│   ├── logs/              # bi-weekly logs, daily logs per student
+│   └── taf/               # Topic Assessment Form, proposals, etc.
+│
+├── manifests/
+│   ├── meds-crds/         # (optional if MEDS uses CRDs)
+│   ├── icap-operator-crds/
+│   ├── policy-engine-crds/
+│   ├── ssdlb-crds/
+│   └── argocd-apps/       # ArgoCD app-of-apps definitions
+│
+├── gitops/
+│   ├── apps/
+│   │   ├── meds/
+│   │   │   ├── base/
+│   │   │   └── overlays/
+│   │   │       ├── dev/
+│   │   │       ├── staging/
+│   │   │       └── prod/
+│   │   │
+│   │   ├── policy-engine/
+│   │   │   ├── base/
+│   │   │   └── overlays/
+│   │   │       ├── dev/
+│   │   │       ├── staging/
+│   │   │       └── prod/
+│   │   │
+│   │   ├── ssdlb/
+│   │   │   ├── base/
+│   │   │   └── overlays/
+│   │   │       ├── dev/
+│   │   │       ├── staging/
+│   │   │       └── prod/
+│   │   │
+│   │   └── icap-operator/
+│   │       ├── base/
+│   │       └── overlays/
+│   │           ├── dev/
+│   │           ├── staging/
+│   │           └── prod/
+│   │
+│   └── policies/
+│       ├── icap/
+│       │   ├── base/
+│       │   └── overlays/
+│       │       ├── dev/
+│       │       ├── staging/
+│       │       └── prod/
+│       │
+│       ├── mesh/
+│       ├── traffic-shaping/
+│       └── global/
+│
+├── components/
+│   ├── meds/                      # YOUR COMPONENT
+│   │   ├── meds-core/
+│   │   │   ├── src/
+│   │   │   ├── charts/            # Helm charts
+│   │   │   ├── Dockerfile
+│   │   │   ├── Makefile
+│   │   │   └── README.md
+│   │   └── tests/
+│   │
+│   ├── policy-engine/
+│   │   ├── root/                  # src for policy engine
+│   │   ├── templates/             # ICAP policy templates
+│   │   ├── validator/             # validation + conflict resolution
+│   │   ├── Dockerfile
+│   │   ├── charts/
+│   │   └── README.md
+│   │
+│   ├── ssdlb/                     # Service Discovery & Load Balancing
+│   │   ├── src/
+│   │   ├── router/
+│   │   ├── metrics/
+│   │   ├── Dockerfile
+│   │   ├── charts/
+│   │   └── README.md
+│   │
+│   └── icap-operator/
+│       ├── cmd/
+│       ├── config/
+│       ├── controllers/
+│       ├── api/
+│       ├── Dockerfile
+│       ├── charts/
+│       └── README.md
+│
+├── infrastructure/
+│   ├── minikube/
+│   ├── kind/
+│   ├── istio/
+│   ├── c-icap/
+│   ├── clamav/
+│   ├── registries/
+│   └── terraform/                 # optional infra automation
+│
+├── cicd/
+│   ├── github-actions/
+│   ├── environment-promotion/     # dev → staging → prod
+│   ├── pipelines/
+│   └── policy-checks/
+│
+└── scripts/
+    ├── setup/
+    ├── deploy/
+    ├── cleanup/
+    └── benchmarking/

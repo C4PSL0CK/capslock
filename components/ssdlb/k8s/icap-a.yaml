@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: icap-a
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: icap
+      version: a
+  template:
+    metadata:
+      labels:
+        app: icap
+        version: a
+    spec:
+      containers:
+      - name: icap
+        image: hashicorp/http-echo
+        args:
+        - "-text=icap-a"
+        - "-listen=:5678"
+        ports:
+        - containerPort: 5678

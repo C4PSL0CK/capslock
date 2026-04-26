@@ -1,0 +1,16 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: EAPEDevPolicy
+metadata:
+    name: eape-dev-policy-constraint
+spec:
+    match:
+        kinds:
+            - apiGroups:
+                - ""
+              kinds:
+                - Pod
+        labelSelector:
+            environment: dev
+    parameters:
+        maxFileSize: 100MB
+        scanningMode: log-only

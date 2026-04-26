@@ -1,0 +1,2 @@
+# KIND infrastructure configuration files
+# This directory contains configurations for local Kubernetes development using KIND

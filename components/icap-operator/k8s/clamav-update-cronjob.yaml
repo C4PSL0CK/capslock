@@ -1,0 +1,46 @@
+# ClamAV Signature Update CronJob
+# Runs freshclam on a schedule and triggers ICAP pod restarts if signatures update
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: clamav-signature-updater
+  namespace: capslock-system
+  labels:
+    app: capslock-icap
+    component: signature-updater
+spec:
+  schedule: "0 */6 * * *"  # Every 6 hours
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: meds-controller
+          restartPolicy: OnFailure
+          containers:
+            - name: freshclam-updater
+              image: clamav/clamav:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  echo "Running freshclam signature update..."
+                  freshclam --log=/tmp/freshclam.log
+                  echo "Signatures updated successfully"
+                  # Annotate the ICAPService CRD to trigger reconciliation
+                  kubectl annotate icapservice capslock-icap \
+                    -n capslock-system \
+                    capslock.io/last-signature-update="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                    --overwrite || true
+              env:
+                - name: FRESHCLAM_NO_DNS:
+                  value: "false"
+              volumeMounts:
+                - name: clamav-signatures
+                  mountPath: /var/lib/clamav
+          volumes:
+            - name: clamav-signatures
+              emptyDir: {}

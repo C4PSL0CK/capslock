@@ -1,0 +1,367 @@
+# CAPSLock – combined Kubernetes deployment manifest
+# Deploys all 4 components into the capslock-system namespace.
+#
+# Prerequisites:
+#   - Istio installed (for SSDLB traffic routing)
+#   - ICAP Operator CRD installed:  kubectl apply -f components/icap-operator/config/crd/bases/
+#   - Container images built and pushed to your registry
+#
+# Apply:
+#   kubectl apply -f manifests/capslock-system.yaml
+
+---
+# ──────────────────────────────────────────────────────────────────────
+# Namespace
+# ──────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: capslock-system
+  labels:
+    istio-injection: enabled
+
+---
+# ──────────────────────────────────────────────────────────────────────
+# ConfigMap – shared service URLs injected into every component
+# ──────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: capslock-urls
+  namespace: capslock-system
+data:
+  POLICY_ENGINE_URL: "http://policy-engine-svc.capslock-system.svc.cluster.local:8000"
+  SSDLB_URL: "http://ssdlb-svc.capslock-system.svc.cluster.local:8082"
+  PROMETHEUS_URL: "http://prometheus.monitoring.svc.cluster.local:9090"
+
+---
+# ══════════════════════════════════════════════════════════════════════
+# COMPONENT 1 – ICAP Operator
+# (The operator itself is deployed via `make deploy` in components/icap-operator.
+#  This section creates the ICAPService custom resource that tells the operator
+#  what to provision.)
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: security.capslock.io/v1alpha1
+kind: ICAPService
+metadata:
+  name: capslock-icap
+  namespace: capslock-system
+spec:
+  replicas: 3
+  clamavConfig:
+    image: "clamav/clamav:latest"
+    signatureUpdateInterval: "1h"
+  healthThresholds:
+    maxLatency: "500ms"
+    maxErrorRate: "0.05"
+    maxSignatureAge: "24h"
+  scalingPolicy:
+    minReplicas: 2
+    maxReplicas: 10
+    targetHealthScore: 80
+
+---
+# ══════════════════════════════════════════════════════════════════════
+# COMPONENT 2 – Policy Engine (EAPE)
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: policy-engine-sa
+  namespace: capslock-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: capslock-policy-engine-role
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "services", "serviceaccounts", "secrets",
+                "resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: capslock-policy-engine-binding
+subjects:
+  - kind: ServiceAccount
+    name: policy-engine-sa
+    namespace: capslock-system
+roleRef:
+  kind: ClusterRole
+  name: capslock-policy-engine-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: policy-engine
+  namespace: capslock-system
+  labels:
+    app: policy-engine
+    component: eape
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: policy-engine
+  template:
+    metadata:
+      labels:
+        app: policy-engine
+        component: eape
+        version: v1
+    spec:
+      serviceAccountName: policy-engine-sa
+      containers:
+        - name: policy-engine
+          image: capslock/policy-engine:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: capslock-urls
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: policy-engine-svc
+  namespace: capslock-system
+  labels:
+    app: policy-engine
+spec:
+  selector:
+    app: policy-engine
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# ══════════════════════════════════════════════════════════════════════
+# COMPONENT 3 – SSDLB Controller
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ssdlb-sa
+  namespace: capslock-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: capslock-ssdlb-role
+rules:
+  # SSDLB needs to apply Istio DestinationRules via kubectl
+  - apiGroups: ["networking.istio.io"]
+    resources: ["destinationrules", "virtualservices"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: capslock-ssdlb-binding
+subjects:
+  - kind: ServiceAccount
+    name: ssdlb-sa
+    namespace: capslock-system
+roleRef:
+  kind: ClusterRole
+  name: capslock-ssdlb-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ssdlb
+  namespace: capslock-system
+  labels:
+    app: ssdlb
+    component: service-discovery
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ssdlb
+  template:
+    metadata:
+      labels:
+        app: ssdlb
+        component: service-discovery
+        version: v1
+    spec:
+      serviceAccountName: ssdlb-sa
+      containers:
+        - name: ssdlb
+          image: capslock/ssdlb:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8082
+          envFrom:
+            - configMapRef:
+                name: capslock-urls
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: COOLDOWN_SECONDS
+              value: "60"
+            - name: MIN_CHANGE_RATIO
+              value: "0.20"
+            - name: LOG_LEVEL
+              value: "INFO"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssdlb-svc
+  namespace: capslock-system
+  labels:
+    app: ssdlb
+spec:
+  selector:
+    app: ssdlb
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+  type: ClusterIP
+
+---
+# ══════════════════════════════════════════════════════════════════════
+# COMPONENT 4 – MEDS (Multi-Environment Deployment System)
+# ══════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meds
+  namespace: capslock-system
+  labels:
+    app: meds
+    component: deployment-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meds
+  template:
+    metadata:
+      labels:
+        app: meds
+        component: deployment-system
+        version: v1
+    spec:
+      containers:
+        - name: meds
+          image: capslock/meds:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: capslock-urls
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          livenessProbe:
+            httpGet:
+              path: /api/environments
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/environments
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: meds-svc
+  namespace: capslock-system
+  labels:
+    app: meds
+spec:
+  selector:
+    app: meds
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+# Expose MEDS externally for local access
+apiVersion: v1
+kind: Service
+metadata:
+  name: meds-nodeport
+  namespace: capslock-system
+spec:
+  selector:
+    app: meds
+  type: NodePort
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080
