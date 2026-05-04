@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any
 import subprocess
@@ -46,6 +46,8 @@ _COMPLIANCE_EVENT_MAP = {
     "recovered_to_single":        {"pci_dss": ["10.2.1"],           "cis": ["4.1.1"]},
     "icap_health_forced_spread":  {"pci_dss": ["10.6.1", "10.3.1"], "cis": ["4.2.1", "4.4.1"]},
     "icap_health_penalty_applied":{"pci_dss": ["10.6.1"],           "cis": ["4.4.1"]},
+    "all_instances_degraded_blocked": {"pci_dss": ["10.6.1", "6.4.1"], "cis": ["4.4.1", "4.2.1"]},
+    "all_instances_degraded_allowed": {"pci_dss": ["10.6.1"],           "cis": ["4.4.1"]},
     "manual_set_version_applied": {"pci_dss": ["10.2.2"],           "cis": ["4.1.1"]},
     "service_registered":         {"pci_dss": ["10.2.2"],           "cis": ["4.1.1"]},
     "service_deregistered":       {"pci_dss": ["10.2.2", "10.3.1"], "cis": ["4.1.1"]},
@@ -69,6 +71,23 @@ ICAP_HEALTH_SPREAD_THRESHOLD = int(os.getenv("ICAP_HEALTH_SPREAD_THRESHOLD", "70
 # Per-instance health penalty multiplier: if a version's health is below this,
 # its observed rate is artificially inflated so it won't be chosen for single mode.
 ICAP_INSTANCE_HEALTHY_FLOOR = int(os.getenv("ICAP_INSTANCE_HEALTHY_FLOOR", "60"))
+
+# Fail policy when ALL registered ICAP instances are simultaneously degraded
+# (health score below ICAP_INSTANCE_HEALTHY_FLOOR).
+#
+# "allow"  — fail-open: traffic continues to be routed even though every ICAP
+#             instance is unhealthy. Prioritises availability but means payloads
+#             may reach workloads without passing antivirus/policy inspection.
+#             Suitable where downtime cost exceeds uninspected-traffic risk.
+#
+# "block"  — fail-closed: auto-route returns HTTP 503 and refuses to apply a
+#             routing decision until at least one instance recovers above the
+#             floor. Prioritises security posture at the cost of availability.
+#             Recommended for PCI-DSS scoped workloads.
+#
+# Default is "allow" to preserve current behaviour; operators in high-security
+# environments should set SSDLB_FAIL_POLICY=block.
+SSDLB_FAIL_POLICY = os.getenv("SSDLB_FAIL_POLICY", "allow").lower()  # allow | block
 
 # Guardrails (tune later)
 COOLDOWN_SECONDS = int(os.getenv("COOLDOWN_SECONDS", "60"))
@@ -131,7 +150,12 @@ def save_state(state: dict):
 
 @app.get("/")
 def health():
-    return {"status": "controller alive"}
+    return {
+        "status": "controller alive",
+        "fail_policy": SSDLB_FAIL_POLICY,
+        "icap_health_floor": ICAP_INSTANCE_HEALTHY_FLOOR,
+        "icap_spread_threshold": ICAP_HEALTH_SPREAD_THRESHOLD,
+    }
 
 
 @app.get("/state")
@@ -260,6 +284,16 @@ def get_request_rates():
             rates[version] = rates.get(version, 0) + value
 
     return rates
+
+
+def _all_instances_degraded(instances: dict) -> bool:
+    """Return True when every registered ICAP instance is below the healthy floor."""
+    if not instances:
+        return False
+    return all(
+        instances.get(ver, {}).get("health_score", 100) < ICAP_INSTANCE_HEALTHY_FLOOR
+        for ver in _service_registry
+    )
 
 
 def get_health_weighted_rates() -> dict:
@@ -563,6 +597,40 @@ def auto_route():
     # Check ICAP operator health — force spread if aggregate score is degraded
     icap_health = get_icap_health()
     agg_score   = icap_health.get("aggregate_health_score", 100)
+    instances   = icap_health.get("instances", {})
+
+    # All-instances-degraded gate: when every ICAP instance is below the healthy
+    # floor, no instance is safe to receive inspected traffic.  Honour FAIL_POLICY.
+    if _all_instances_degraded(instances):
+        if SSDLB_FAIL_POLICY == "block":
+            log_compliance_event(
+                "all_instances_degraded_blocked",
+                aggregate_health_score=agg_score,
+                fail_policy=SSDLB_FAIL_POLICY,
+                floor=ICAP_INSTANCE_HEALTHY_FLOOR,
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "status": "all-instances-degraded",
+                    "fail_policy": "block",
+                    "aggregate_health_score": agg_score,
+                    "floor": ICAP_INSTANCE_HEALTHY_FLOOR,
+                    "message": (
+                        "All ICAP instances are below the healthy floor. "
+                        "Routing blocked (SSDLB_FAIL_POLICY=block). "
+                        "Set SSDLB_FAIL_POLICY=allow to permit uninspected routing."
+                    ),
+                },
+            )
+        else:
+            log_compliance_event(
+                "all_instances_degraded_allowed",
+                aggregate_health_score=agg_score,
+                fail_policy=SSDLB_FAIL_POLICY,
+                floor=ICAP_INSTANCE_HEALTHY_FLOOR,
+            )
+
     if icap_health and agg_score < ICAP_HEALTH_SPREAD_THRESHOLD and state.get("mode") != "spread":
         result = subprocess.run(
             ["kubectl", "apply", "-f", os.path.join(DR_DIR, "dr-spread.yaml")],

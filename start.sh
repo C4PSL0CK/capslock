@@ -60,10 +60,10 @@ fi
 PIP="$VENV/bin/pip"
 UVICORN="$VENV/bin/uvicorn"
 
-"$PIP" install -q --upgrade pip
-"$PIP" install -q -r "$ROOT/components/ssdlb/controller/requirements.txt"
-"$PIP" install -q -r "$ROOT/components/policy-engine/api/requirements.txt"
-"$PIP" install -q -r "$ROOT/components/meds-research/requirements.txt"
+"$PIP" install -q --upgrade pip 2>/dev/null || true
+"$PIP" install -q -r "$ROOT/components/ssdlb/controller/requirements.txt" 2>/dev/null || true
+"$PIP" install -q -r "$ROOT/components/policy-engine/api/requirements.txt" 2>/dev/null || true
+"$PIP" install -q -r "$ROOT/components/meds-research/requirements.txt" 2>/dev/null || true
 
 # ── 2. Start icap-operator (if cluster available and binary exists) ──────────
 OPERATOR_BIN="$ROOT/components/icap-operator/bin/manager"

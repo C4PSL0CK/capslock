@@ -18,7 +18,16 @@ logger = get_logger("meds.icap")
 ICAP_SERVICE_HOST = os.getenv("ICAP_SERVICE_HOST", "")
 ICAP_SERVICE_PORT = int(os.getenv("ICAP_SERVICE_PORT", "1344"))
 
-# Priority 2: policy-engine compliance gate
+# Priority 2: pluggable external scanner backend (e.g. Trivy, Grype, behavioural tools)
+# Set EXTERNAL_SCANNER_URL to a REST endpoint that accepts POST with JSON body:
+#   {"version": str, "application": str}
+# and returns JSON:
+#   {"threat_found": bool, "threat_type": str|null, "coverage_score": int}
+# This runs before the ICAP protocol scan so specialised scanners take precedence.
+# Example: EXTERNAL_SCANNER_URL=http://trivy-scanner:8080/scan
+EXTERNAL_SCANNER_URL = os.getenv("EXTERNAL_SCANNER_URL", "").rstrip("/")
+
+# Priority 3: policy-engine compliance gate
 POLICY_ENGINE_URL = os.getenv("POLICY_ENGINE_URL", "").rstrip("/")
 
 # Cache TTL for scanning_mode (seconds) — avoids a round-trip on every scan
@@ -39,7 +48,20 @@ class ICAPScanner:
         self._scanning_mode_fetched_at: float = 0.0
 
     def scan(self, version: str, application_name: str) -> ICAPScanResult:
-        # 1. Real ICAP protocol (available in Kubernetes with icap-operator deployed)
+        # 1. Pluggable external scanner (Trivy, Grype, behavioural tools, etc.)
+        #    Takes highest priority so specialised backends override ClamAV.
+        if EXTERNAL_SCANNER_URL:
+            try:
+                return self._external_scanner_scan(version, application_name)
+            except Exception as e:
+                logger.warning(
+                    "external_scanner_failed",
+                    error=str(e),
+                    url=EXTERNAL_SCANNER_URL,
+                    fallback="icap_protocol",
+                )
+
+        # 2. Real ICAP protocol (available in Kubernetes with icap-operator deployed)
         if ICAP_SERVICE_HOST:
             try:
                 return self._icap_protocol_scan(version, application_name)
@@ -52,7 +74,7 @@ class ICAPScanner:
                     fallback="policy_engine",
                 )
 
-        # 2. Policy-engine compliance gate (available in docker-compose / local)
+        # 3. Policy-engine compliance gate (available in docker-compose / local)
         if POLICY_ENGINE_URL:
             try:
                 return self._policy_engine_scan(version, application_name)
@@ -64,12 +86,59 @@ class ICAPScanner:
                     fallback="simulation",
                 )
 
-        # 3. Deterministic simulation (offline / CI)
+        # 4. Deterministic simulation (offline / CI)
         mode = self._get_scanning_mode() if POLICY_ENGINE_URL else "block"
         return self._simulated_scan(version, application_name, mode)
 
     # -------------------------------------------------------------------------
-    # Layer 1 — RFC 3507 ICAP RESPMOD over raw TCP socket
+    # Layer 1 — Pluggable external scanner (Trivy, Grype, behavioural tools)
+    # -------------------------------------------------------------------------
+    def _external_scanner_scan(self, version: str, application_name: str) -> ICAPScanResult:
+        """
+        Delegates scanning to an external REST backend configured via
+        EXTERNAL_SCANNER_URL.  The backend must accept:
+
+            POST <url>/scan
+            Content-Type: application/json
+            {"version": "<version>", "application": "<name>"}
+
+        and return:
+            {"threat_found": bool, "threat_type": str|null, "coverage_score": int}
+
+        Any additional fields are ignored.  The caller (scan()) falls through
+        to the next layer if this raises, so the backend failing does not block
+        promotions unless it is the only configured layer.
+        """
+        payload = {"version": version, "application": application_name}
+        r = httpx.post(f"{EXTERNAL_SCANNER_URL}/scan", json=payload, timeout=10.0)
+        r.raise_for_status()
+        data = r.json()
+
+        threat_found   = bool(data.get("threat_found", False))
+        threat_type    = data.get("threat_type") or None
+        coverage_score = int(data.get("coverage_score", 85))
+
+        result = ICAPScanResult(
+            threat_found=threat_found,
+            threat_type=threat_type,
+            coverage_score=coverage_score,
+            low_coverage_warning=coverage_score < 75,
+            scanned_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        logger.info(
+            "icap_scan_complete",
+            version=version,
+            application_name=application_name,
+            threat_found=threat_found,
+            coverage_score=coverage_score,
+            mode="external_scanner",
+            scanner_url=EXTERNAL_SCANNER_URL,
+        )
+        return result
+
+    # -------------------------------------------------------------------------
+    # Layer 2 — RFC 3507 ICAP RESPMOD over raw TCP socket
     # -------------------------------------------------------------------------
     def _icap_protocol_scan(self, version: str, application_name: str) -> ICAPScanResult:
         """
@@ -162,7 +231,7 @@ class ICAPScanner:
         return result
 
     # -------------------------------------------------------------------------
-    # Layer 2 — Policy-engine compliance gate
+    # Layer 3 — Policy-engine compliance gate
     # -------------------------------------------------------------------------
     def _get_scanning_mode(self) -> str:
         """Return scanning_mode, re-fetching from policy-engine at most once per TTL."""
@@ -235,7 +304,7 @@ class ICAPScanner:
         return result
 
     # -------------------------------------------------------------------------
-    # Layer 3 — Deterministic simulation (offline / CI)
+    # Layer 4 — Deterministic simulation (offline / CI)
     # -------------------------------------------------------------------------
     def _simulated_scan(self, version: str, application_name: str, scanning_mode: str = "block") -> ICAPScanResult:
         """Deterministic simulation used when policy-engine is unreachable."""

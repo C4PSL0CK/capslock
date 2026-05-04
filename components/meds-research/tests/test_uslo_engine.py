@@ -13,8 +13,8 @@ def make_promotion(add_policies):
     return types.SimpleNamespace(spec=spec)
 
 
-def make_env(env_type):
-    return types.SimpleNamespace(type=env_type)
+def make_env(env_type, policies=None):
+    return types.SimpleNamespace(type=env_type, policies=policies or [])
 
 
 @pytest.fixture
@@ -22,14 +22,14 @@ def tracker():
     return PolicyEvolutionTracker()
 
 
-def test_production_env_audit_mode(tracker):
+def test_production_env_enforce_mode(tracker):
     promotion = make_promotion(["network-segmentation"])
     target = make_env("production")
     plan = tracker.plan_migration(promotion, make_env("staging"), target)
     assert len(plan["changes"]) == 1
     change = plan["changes"][0]
-    assert change["mode"] == "audit"
-    assert change["grace_period"] == "48h"
+    assert change["mode"] == "enforce"
+    assert change["grace_period"] == "0h"
 
 
 def test_staging_env_audit_mode(tracker):
@@ -54,7 +54,8 @@ def test_policy_not_in_catalog(tracker):
     promotion = make_promotion(["unknown-policy-xyz"])
     plan = tracker.plan_migration(promotion, make_env("development"), make_env("production"))
     change = plan["changes"][0]
-    assert "error" in change
+    assert change.get("violation") is True
+    assert "reason" in change
 
 
 def test_policy_in_catalog_has_severity(tracker):
@@ -66,29 +67,33 @@ def test_policy_in_catalog_has_severity(tracker):
 
 
 def test_zero_policies_no_compliance_impact(tracker):
+    # Use dev→dev to avoid missing-required-policy warnings for staging/prod
     promotion = make_promotion([])
-    plan = tracker.plan_migration(promotion, make_env("development"), make_env("staging"))
+    plan = tracker.plan_migration(promotion, make_env("development"), make_env("development"))
     assert plan["compliance_impact"].startswith("NONE")
 
 
 def test_one_policy_low_compliance_impact(tracker):
+    # dev→dev: 1 policy applied, no missing required policies
     promotion = make_promotion(["audit-logging"])
-    plan = tracker.plan_migration(promotion, make_env("development"), make_env("staging"))
+    plan = tracker.plan_migration(promotion, make_env("development"), make_env("development"))
     assert plan["compliance_impact"].startswith("LOW")
 
 
 def test_three_policies_medium_compliance_impact(tracker):
+    # dev→dev: 3 policies applied, no missing required policies
     promotion = make_promotion(["audit-logging", "rbac-least-privilege", "secrets-encryption"])
-    plan = tracker.plan_migration(promotion, make_env("staging"), make_env("production"))
+    plan = tracker.plan_migration(promotion, make_env("development"), make_env("development"))
     assert plan["compliance_impact"].startswith("MEDIUM")
 
 
 def test_five_policies_high_compliance_impact(tracker):
+    # dev→dev: 5 policies applied, no missing required policies
     promotion = make_promotion([
         "audit-logging", "rbac-least-privilege", "secrets-encryption",
         "network-segmentation", "pod-security-standards",
     ])
-    plan = tracker.plan_migration(promotion, make_env("staging"), make_env("production"))
+    plan = tracker.plan_migration(promotion, make_env("development"), make_env("development"))
     assert plan["compliance_impact"].startswith("HIGH")
 
 
@@ -97,4 +102,4 @@ def test_plan_has_required_keys(tracker):
     plan = tracker.plan_migration(promotion, make_env("development"), make_env("staging"))
     assert "changes" in plan
     assert "compliance_impact" in plan
-    assert "missing_required_policies" in plan
+    assert "warnings" in plan

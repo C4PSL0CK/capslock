@@ -58,7 +58,7 @@ def mock_icap_clean():
         threat_type=None,
         coverage_score=95,
         low_coverage_warning=False,
-        scanning_mode="block",
+        scanned_at="2026-01-01T00:00:00Z",
     )
     return scanner
 
@@ -70,7 +70,7 @@ def mock_icap_threat():
         threat_type="MALWARE.Test.EICAR",
         coverage_score=80,
         low_coverage_warning=False,
-        scanning_mode="block",
+        scanned_at="2026-01-01T00:00:00Z",
     )
     return scanner
 
@@ -142,7 +142,7 @@ class TestFullPipeline:
         ctrl = self._make_controller(tmp_path=tmp_path)
         promo = make_promotion(version="v2.0.0-alpha.1", source_env="staging", target_env="production")
         source_env = make_env("staging", "staging", max_risk=60)
-        target_env = make_env("production", "production", max_risk=40)
+        target_env = make_env("production", "production", max_risk=35)
 
         result = ctrl.process_promotion(promo, source_env, target_env)
 

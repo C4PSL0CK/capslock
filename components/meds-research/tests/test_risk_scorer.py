@@ -8,6 +8,8 @@ def scorer():
 
 
 # --- Individual factor tests ---
+# Current weights: config=0.20, policy=0.25, version_delta=0.15,
+#                  env_trans=0.10, icap_coverage=0.20, compliance_posture=0.10
 
 def test_alpha_version_config_score(scorer):
     factor = scorer._assess_config_complexity("v1.0-alpha")
@@ -21,7 +23,7 @@ def test_beta_version_config_score(scorer):
 
 def test_rc_version_config_score(scorer):
     factor = scorer._assess_config_complexity("v1.0-rc1")
-    assert factor.score == 60
+    assert factor.score == 55
 
 
 def test_major_version_config_score(scorer):
@@ -31,12 +33,12 @@ def test_major_version_config_score(scorer):
 
 def test_minor_version_config_score(scorer):
     factor = scorer._assess_config_complexity("v1.2.0")
-    assert factor.score == 40
+    assert factor.score == 35
 
 
 def test_stable_patch_low_config_score(scorer):
     factor = scorer._assess_config_complexity("v1.2.3")
-    assert factor.score == 20
+    assert factor.score == 15
 
 
 def test_zero_policy_changes(scorer):
@@ -44,34 +46,38 @@ def test_zero_policy_changes(scorer):
     assert factor.score == 0
 
 
-def test_two_policy_changes_low(scorer):
+def test_two_policy_changes_with_removal_penalty(scorer):
+    # 1 add + 1 remove: base=35, removal_penalty=15 → 50
     factor = scorer._assess_policy_changes(["a"], ["b"])
-    assert factor.score == 30
+    assert factor.score == 50
 
 
-def test_four_policy_changes_medium(scorer):
+def test_four_policy_changes_with_two_removals(scorer):
+    # 2 add + 2 remove: base=65, removal_penalty=30 → min(100,95)=95
     factor = scorer._assess_policy_changes(["a", "b"], ["c", "d"])
-    assert factor.score == 60
+    assert factor.score == 95
 
 
-def test_five_policy_changes_high(scorer):
+def test_five_policy_additions_no_removals(scorer):
+    # 5 add, 0 remove: base=80, penalty=0 → 80
     factor = scorer._assess_policy_changes(["a", "b", "c", "d", "e"], [])
-    assert factor.score == 90
+    assert factor.score == 80
 
 
 def test_dev_to_staging_environment_score(scorer):
     factor = scorer._assess_environment_transition("development", "staging")
-    assert factor.score == 20
+    assert factor.score == 15
 
 
 def test_staging_to_prod_environment_score(scorer):
     factor = scorer._assess_environment_transition("staging", "production")
-    assert factor.score == 30
+    assert factor.score == 25
 
 
-def test_dev_to_prod_skip_very_high(scorer):
+def test_dev_to_prod_skip_blocked(scorer):
+    # Stage-skipping is blocked → maximum risk score
     factor = scorer._assess_environment_transition("development", "production")
-    assert factor.score == 90
+    assert factor.score == 100
 
 
 def test_alpha_version_delta_high(scorer):
@@ -79,9 +85,9 @@ def test_alpha_version_delta_high(scorer):
     assert factor.score == 80
 
 
-def test_stable_version_delta_low(scorer):
+def test_stable_patch_version_delta_low(scorer):
     factor = scorer._assess_version_delta("v1.2.3")
-    assert factor.score == 30
+    assert factor.score == 10
 
 
 # --- Combined scoring tests ---
@@ -138,4 +144,4 @@ def test_result_contains_required_keys(scorer):
     assert "max_allowed" in result
     assert "factors" in result
     assert "recommendation" in result
-    assert len(result["factors"]) == 4
+    assert len(result["factors"]) == 6

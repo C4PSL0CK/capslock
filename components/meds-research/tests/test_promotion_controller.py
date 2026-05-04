@@ -77,17 +77,18 @@ def test_rejected_by_risk_score(mock_dependencies):
     controller, mock_scanner, mock_audit, mock_store = mock_dependencies
     mock_scanner.scan.return_value = clean_icap(coverage_score=90)
 
-    # alpha + dev->prod + 5 policies = score well above 40
+    # alpha staging->prod + 5 policies = score well above max 40
     promotion = make_promotion(
-        "v2.0.0-alpha", "development", "production",
+        "v2.0.0-alpha", "staging", "production",
         add_policies=["a", "b", "c", "d", "e"],
     )
-    source = make_env("development", "development", 80)
+    source = make_env("staging", "staging", 60)
     target = make_env("production", "production", 40)
 
     result = controller.process_promotion(promotion, source, target)
 
     assert result["decision"] == "REJECTED"
+    assert result["icap_scan"] is not None
     assert result["icap_scan"]["threat_found"] is False
     assert promotion.status.decision == "REJECTED"
 

@@ -70,7 +70,7 @@ func (r *Resolver) DetectConflicts(pol *policy.PolicyTemplate) []PolicyConflict 
 			conflicts = append(conflicts, PolicyConflict{
 				Type:        ConflictTypeCompliance,
 				Severity:    "HIGH",
-				Description: "PCI-DSS compliance requires 'restricted' Pod Security Standard",
+				Description: "PCI-DSS technical control alignment requires 'restricted' Pod Security Standard",
 				Policy1:     pol.Name,
 				Remediation: "Set pod_security.standard to 'restricted'",
 			})
@@ -82,7 +82,7 @@ func (r *Resolver) DetectConflicts(pol *policy.PolicyTemplate) []PolicyConflict 
 				conflicts = append(conflicts, PolicyConflict{
 					Type:        ConflictTypeCompliance,
 					Severity:    "HIGH",
-					Description: "CIS and PCI-DSS compliance require network policies",
+					Description: "CIS and PCI-DSS technical control alignment requires network policies",
 					Policy1:     pol.Name,
 					Remediation: "Set network.require_network_policies to true",
 				})

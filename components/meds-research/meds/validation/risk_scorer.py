@@ -1,3 +1,4 @@
+import os
 import re
 from typing import List, Dict, Any, Optional
 
@@ -33,13 +34,38 @@ class RiskScorer:
       compliance_posture  0.10  — policy-engine compliance score (lower = higher risk)
     """
 
+    # Factor weights rationale (sum = 1.00):
+    #
+    # policy_changes      0.25  Highest weight: adding/removing policies is the
+    #                           most direct change to the security posture of a
+    #                           running workload.  Removals carry an extra penalty
+    #                           multiplier because they loosen controls.
+    #
+    # config_complexity   0.20  Version maturity (alpha→patch) is a strong proxy
+    # icap_coverage       0.20  for deployment risk.  ICAP coverage is equally
+    #                           weighted because an uninspected artifact is as
+    #                           dangerous as an unstable one.
+    #
+    # version_delta       0.15  Semantic versioning distance matters but is less
+    #                           actionable than the two factors above; a major
+    #                           bump is already captured by config_complexity.
+    #
+    # environment_trans   0.10  Valid transitions (dev→staging, staging→prod) carry
+    # compliance_posture  0.10  inherent but bounded risk; blocked transitions
+    #                           score 100 and reject outright regardless of weight.
+    #                           compliance_posture reflects current policy-engine
+    #                           state rather than the change itself.
+    #
+    # To override weights at runtime set RISK_WEIGHT_<FACTOR>=<float> env vars,
+    # e.g. RISK_WEIGHT_POLICY_CHANGES=0.30.  Weights are normalised so they
+    # always sum to 1.0 even after partial overrides.
     WEIGHTS = {
-        "config_complexity":  0.20,
-        "policy_changes":     0.25,
-        "version_delta":      0.15,
-        "environment_trans":  0.10,
-        "icap_coverage":      0.20,
-        "compliance_posture": 0.10,
+        "config_complexity":  float(os.getenv("RISK_WEIGHT_CONFIG_COMPLEXITY",  "0.20")),
+        "policy_changes":     float(os.getenv("RISK_WEIGHT_POLICY_CHANGES",     "0.25")),
+        "version_delta":      float(os.getenv("RISK_WEIGHT_VERSION_DELTA",      "0.15")),
+        "environment_trans":  float(os.getenv("RISK_WEIGHT_ENVIRONMENT_TRANS",  "0.10")),
+        "icap_coverage":      float(os.getenv("RISK_WEIGHT_ICAP_COVERAGE",      "0.20")),
+        "compliance_posture": float(os.getenv("RISK_WEIGHT_COMPLIANCE_POSTURE", "0.10")),
     }
 
     # Enforced promotion order
@@ -49,6 +75,13 @@ class RiskScorer:
         "staging":     ["production"],
         "production":  [],
     }
+
+    def _normalised_weights(self) -> Dict[str, float]:
+        """Return WEIGHTS normalised to sum=1.0, so partial env-var overrides stay valid."""
+        total = sum(self.WEIGHTS.values())
+        if abs(total - 1.0) < 1e-9:
+            return self.WEIGHTS
+        return {k: round(v / total, 10) for k, v in self.WEIGHTS.items()}
 
     def calculate_risk_score(
         self,
@@ -61,13 +94,14 @@ class RiskScorer:
         icap_coverage_score: Optional[int] = None,   # 0-100 from ICAP scanner
         compliance_score: Optional[float] = None,    # 0.0-1.0 from policy engine
     ) -> Dict[str, Any]:
+        weights = self._normalised_weights()
         factors = [
-            self._assess_config_complexity(version),
-            self._assess_policy_changes(add_policies, remove_policies),
-            self._assess_version_delta(version),
-            self._assess_environment_transition(source_environment, target_environment),
-            self._assess_icap_coverage(icap_coverage_score),
-            self._assess_compliance_posture(compliance_score),
+            self._assess_config_complexity(version, weights),
+            self._assess_policy_changes(add_policies, remove_policies, weights),
+            self._assess_version_delta(version, weights),
+            self._assess_environment_transition(source_environment, target_environment, weights),
+            self._assess_icap_coverage(icap_coverage_score, weights),
+            self._assess_compliance_posture(compliance_score, weights),
         ]
         total_score = int(sum(f.weighted_score for f in factors))
         recommendation = self._generate_recommendation(total_score, max_allowed_score)
@@ -80,7 +114,8 @@ class RiskScorer:
 
     # ── Factor assessors ──────────────────────────────────────────────────────
 
-    def _assess_config_complexity(self, version: str) -> RiskFactor:
+    def _assess_config_complexity(self, version: str, weights: Dict[str, float] = None) -> RiskFactor:
+        w = (weights or self.WEIGHTS)["config_complexity"]
         v = version.lower()
         if "alpha" in v:
             score, reason = 90, "Alpha pre-release — very high instability risk"
@@ -94,9 +129,10 @@ class RiskScorer:
             score, reason = 35, "Minor version bump — additive changes, low breaking risk"
         else:
             score, reason = 15, "Patch version — bug fixes only, minimal risk"
-        return RiskFactor("config_complexity", score, self.WEIGHTS["config_complexity"], reason)
+        return RiskFactor("config_complexity", score, w, reason)
 
-    def _assess_policy_changes(self, add_policies: List[str], remove_policies: List[str]) -> RiskFactor:
+    def _assess_policy_changes(self, add_policies: List[str], remove_policies: List[str], weights: Dict[str, float] = None) -> RiskFactor:
+        w = (weights or self.WEIGHTS)["policy_changes"]
         adds = len(add_policies)
         removes = len(remove_policies)
         total = adds + removes
@@ -114,9 +150,10 @@ class RiskScorer:
                 parts.append(f"{removes} removal{'s' if removes > 1 else ''} (+{removal_penalty} removal penalty)")
             level = "high" if score > 60 else "moderate" if score > 30 else "low"
             reason = f"{', '.join(parts)} — {level} policy risk"
-        return RiskFactor("policy_changes", score, self.WEIGHTS["policy_changes"], reason)
+        return RiskFactor("policy_changes", score, w, reason)
 
-    def _assess_version_delta(self, version: str) -> RiskFactor:
+    def _assess_version_delta(self, version: str, weights: Dict[str, float] = None) -> RiskFactor:
+        w = (weights or self.WEIGHTS)["version_delta"]
         v = version.lower()
         if "alpha" in v:
             score, reason = 80, "Pre-release: unstable API surface, no compatibility guarantee"
@@ -130,9 +167,10 @@ class RiskScorer:
             score, reason = 30, "Minor bump: additive changes, backwards-compatible"
         else:
             score, reason = 10, "Patch bump: targeted bug fixes, high confidence"
-        return RiskFactor("version_delta", score, self.WEIGHTS["version_delta"], reason)
+        return RiskFactor("version_delta", score, w, reason)
 
-    def _assess_environment_transition(self, source: str, target: str) -> RiskFactor:
+    def _assess_environment_transition(self, source: str, target: str, weights: Dict[str, float] = None) -> RiskFactor:
+        w = (weights or self.WEIGHTS)["environment_trans"]
         allowed = self._VALID_TRANS.get(source.lower(), [])
         if target.lower() == source.lower():
             score, reason = 100, f"Same-environment promotion blocked: {source} → {target}"
@@ -153,9 +191,10 @@ class RiskScorer:
             score, reason = 25, "Gate promotion: staging → production"
         else:
             score, reason = 20, f"Valid transition: {source} → {target}"
-        return RiskFactor("environment_transition", score, self.WEIGHTS["environment_trans"], reason)
+        return RiskFactor("environment_transition", score, w, reason)
 
-    def _assess_icap_coverage(self, coverage_score: Optional[int]) -> RiskFactor:
+    def _assess_icap_coverage(self, coverage_score: Optional[int], weights: Dict[str, float] = None) -> RiskFactor:
+        w = (weights or self.WEIGHTS)["icap_coverage"]
         if coverage_score is None:
             score, reason = 60, "ICAP coverage unknown — no scan data available"
         elif coverage_score >= 90:
@@ -168,9 +207,10 @@ class RiskScorer:
             score, reason = 70, f"Poor ICAP coverage ({coverage_score}/100) — review scan config"
         else:
             score, reason = 90, f"Critical ICAP coverage gap ({coverage_score}/100)"
-        return RiskFactor("icap_coverage", score, self.WEIGHTS["icap_coverage"], reason)
+        return RiskFactor("icap_coverage", score, w, reason)
 
-    def _assess_compliance_posture(self, compliance_score: Optional[float]) -> RiskFactor:
+    def _assess_compliance_posture(self, compliance_score: Optional[float], weights: Dict[str, float] = None) -> RiskFactor:
+        w = (weights or self.WEIGHTS)["compliance_posture"]
         if compliance_score is None:
             score, reason = 50, "Compliance posture unknown — policy engine unreachable"
         else:
@@ -183,7 +223,7 @@ class RiskScorer:
                 score, reason = 55, f"Degraded compliance posture ({pct}% — policy violations present)"
             else:
                 score, reason = 80, f"Critical compliance gap ({pct}% — significant violations)"
-        return RiskFactor("compliance_posture", score, self.WEIGHTS["compliance_posture"], reason)
+        return RiskFactor("compliance_posture", score, w, reason)
 
     # ── Recommendation ────────────────────────────────────────────────────────
 
