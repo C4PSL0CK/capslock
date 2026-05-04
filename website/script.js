@@ -66,15 +66,29 @@ const contactForm = document.getElementById('contactForm');
 if (contactForm) {
   contactForm.addEventListener('submit', e => {
     e.preventDefault();
+
+    const name    = document.getElementById('cf-name').value.trim();
+    const email   = document.getElementById('cf-email').value.trim();
+    const subject = document.getElementById('cf-subject').value;
+    const message = document.getElementById('cf-message').value.trim();
+
+    if (!name || !email || !message) return;
+
+    const body = `Name: ${name}\nEmail: ${email}\n\n${message}`;
+    const mailto = `mailto:capslockkube@gmail.com`
+      + `?subject=${encodeURIComponent('[CAPSLock] ' + subject)}`
+      + `&body=${encodeURIComponent(body)}`;
+
+    window.location.href = mailto;
+
     const btn = contactForm.querySelector('button[type=submit]');
-    btn.textContent = 'Message Sent ✓';
+    btn.textContent = 'Opening email client...';
     btn.style.background = 'var(--accent-green)';
     btn.style.color = '#060b18';
     setTimeout(() => {
       btn.textContent = 'Send Message';
       btn.style.background = '';
       btn.style.color = '';
-      contactForm.reset();
     }, 3000);
   });
 }
