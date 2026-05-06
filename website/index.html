@@ -163,34 +163,49 @@
       <div class="domain-card">
         <div class="d-icon">🔐</div>
         <h3>Kubernetes Security Policy Gaps</h3>
-        <p>Existing GitOps tools (ArgoCD, FluxCD, Spinnaker) automate deployment but provide no mechanism for environment-aware security policy enforcement or risk-based promotion gates, creating silent security regressions between environments.</p>
+        <p>Existing GitOps tools (ArgoCD, FluxCD, Spinnaker) automate deployment but provide no mechanism for environment-aware security policy enforcement or risk-based promotion gates, creating silent security regressions between environments. <sup style="color:var(--accent);font-size:0.7rem;">[2][10]</sup></p>
       </div>
       <div class="domain-card">
         <div class="d-icon">🔌</div>
         <h3>ICAP Integration Deficit</h3>
-        <p>Traditional ICAP (RFC 3507) relies on persistent proxy connections incompatible with Kubernetes' ephemeral pod lifecycle. No native Kubernetes operator exists to manage ClamAV-backed ICAP scanning as a first-class cluster resource.</p>
+        <p>Traditional ICAP (RFC 3507) relies on persistent proxy connections incompatible with Kubernetes' ephemeral pod lifecycle. No native Kubernetes operator exists to manage ClamAV-backed ICAP scanning as a first-class cluster resource. <sup style="color:var(--accent);font-size:0.7rem;">[5][3]</sup></p>
       </div>
       <div class="domain-card">
         <div class="d-icon">⚖️</div>
         <h3>Fragmented Toolchains</h3>
-        <p>Organizations use siloed tools — scanners, admission controllers, service meshes, and monitors — with no unified orchestration layer. This creates overlapping or conflicting policies and compliance visibility gaps across environment tiers.</p>
+        <p>Organizations use siloed tools — scanners, admission controllers, service meshes, and monitors — with no unified orchestration layer. This creates overlapping or conflicting policies and compliance visibility gaps across environment tiers. <sup style="color:var(--accent);font-size:0.7rem;">[4][6]</sup></p>
       </div>
       <div class="domain-card">
         <div class="d-icon">📋</div>
         <h3>Compliance Framework Coverage</h3>
-        <p>CIS Kubernetes Benchmark v1.9 and PCI-DSS v4.0 both define controls for cluster security, but no automated system validates and enforces these across environment promotion boundaries continuously.</p>
+        <p>CIS Kubernetes Benchmark v1.9 and PCI-DSS v4.0 both define controls for cluster security, but no automated system validates and enforces these across environment promotion boundaries continuously. <sup style="color:var(--accent);font-size:0.7rem;">[4][8]</sup></p>
       </div>
       <div class="domain-card">
         <div class="d-icon">🔄</div>
         <h3>Policy Evolution Problem</h3>
-        <p>Security policies diverge between dev, staging, and production environments. Development runs relaxed policies while production enforces strict controls, with staging frequently failing to achieve parity — a "false sense of security."</p>
+        <p>Security policies diverge between dev, staging, and production environments. Development runs relaxed policies while production enforces strict controls, with staging frequently failing to achieve parity — a "false sense of security." <sup style="color:var(--accent);font-size:0.7rem;">[7][1]</sup></p>
       </div>
       <div class="domain-card">
         <div class="d-icon">📊</div>
         <h3>Risk-Aware Deployment Absence</h3>
-        <p>CI/CD pipelines validate only functional correctness. No intelligent multi-factor gate exists to prevent security regressions during promotion — version maturity, policy changes, ICAP coverage, and compliance posture are not jointly evaluated.</p>
+        <p>CI/CD pipelines validate only functional correctness. No intelligent multi-factor gate exists to prevent security regressions during promotion — version maturity, policy changes, ICAP coverage, and compliance posture are not jointly evaluated. <sup style="color:var(--accent);font-size:0.7rem;">[1][9]</sup></p>
       </div>
     </div>
+
+    <!-- IEEE Citations -->
+    <h3 style="font-size:1rem; margin: 2.5rem 0 0.75rem; color:var(--text-secondary); letter-spacing:0.05em; text-transform:uppercase;">IEEE Citations</h3>
+    <ol style="font-size:0.78rem; color:var(--text-muted); line-height:1.8; padding-left:1.25rem; margin:0;">
+      <li>B. Erdenebat, B. Bud, T. Batsuren, and T. Kozsik, "Multi-Project Multi-Environment Approach — An Enhancement to Existing DevOps and CI/CD Tools," <em>Computers</em>, vol. 12, no. 12, Art. no. 254, Dec. 2023. doi: 10.3390/computers12120254.</li>
+      <li>S. Sultan, I. Ahmad, and T. Dimitriou, "Container Security: Issues, Challenges, and the Road Ahead," <em>IEEE Access</em>, vol. 7, pp. 52968–52975, Apr. 2019. doi: 10.1109/ACCESS.2019.2912413.</li>
+      <li>I. Elgendi, A. Mustapha, Q. Nasir, and A. Marka, "Container Security: Issues, Challenges, and the Road Ahead," <em>IEEE Access</em>, vol. 7, pp. 52976–52996, Apr. 2019. doi: 10.1109/ACCESS.2019.2912540.</li>
+      <li>A. Rahman, S. I. S. Shamim, D. B. Bose, and R. Pandita, "Security Misconfigurations in Open Source Kubernetes Manifests: An Empirical Study," <em>ACM Trans. Softw. Eng. Methodol.</em>, vol. 32, no. 1, Art. no. 3, Jan. 2023. doi: 10.1145/3571234.</li>
+      <li>J. Elson and A. Howell, "ICAP: Internet Content Adaptation Protocol," RFC 3507, IETF, Apr. 2003.</li>
+      <li>A. Gogineni, "Multi-Cloud Deployment with Kubernetes: Challenges, Strategies, and Performance Optimization," <em>Int. Scientific Journal of Engineering and Management</em>, vol. 1, no. 2, pp. 1–7, Sept. 2022. doi: 10.55041/ISJEM00036.</li>
+      <li>C. Luca, "GitOps in Multi-Cloud and Hybrid Cloud Environments," ResearchGate Preprint, Dec. 2022. [Online]. Available: https://www.researchgate.net/publication/388109376.</li>
+      <li>Square Compute Security, "Kube-Policies: Guardrails for Apps Running in Kubernetes (Part 1)," Square Developer Blog, Oct. 2023. [Online]. Available: https://developer.squareup.com/blog/kube-policies-guardrails-for-apps-running-in-kubernetes/.</li>
+      <li>M. A. Rahman, M. Hassanpour, T. Abdelzaher, and I. Gupta, "Kubernetes Scheduling: Taxonomy, Ongoing Issues and Challenges," <em>ACM Computing Surveys</em>, vol. 55, no. 4, pp. 1–37, Jul. 2022. doi: 10.1145/3529444.</li>
+      <li>M. S. I. Shamim, F. A. Bhuiyan, and A. Rahman, "XI Commandments of Kubernetes Security: A Systematization of Knowledge Related to Kubernetes Security Practices," in <em>Proc. IEEE Secure Development (SecDev)</em>, Atlanta, GA, USA, 2020, pp. 58–64. doi: 10.1109/SecDev45635.2020.00026.</li>
+    </ol>
 
     <!-- Research Gap -->
     <h3 style="font-size:1.2rem; margin: 2.5rem 0 0.5rem; color:var(--text-secondary);">Research Gap</h3>
